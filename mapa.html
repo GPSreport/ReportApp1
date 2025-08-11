@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🗺️ Mapa de Reportes GPS</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Bootstrap CSS para mejor diseño -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Font Awesome para iconos -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Arial', sans-serif;
+            min-height: 100vh;
+        }
+        
+        .container-fluid {
+            padding: 20px;
+        }
+        
+        .main-title {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        #map {
+            height: 70vh;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            border: 3px solid rgba(255,255,255,0.2);
+        }
+        
+        .stats-card {
+            background: rgba(255,255,255,0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            margin: 10px 0;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+        
+        .photo-container {
+            max-height: 400px;
+            overflow-y: auto;
+            background: rgba(255,255,255,0.95);
+            border-radius: 15px;
+            padding: 20px;
+            margin-top: 20px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+        }
+        
+        .photo-item {
+            margin-bottom: 15px;
+            padding: 10px;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            background: white;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .photo-item:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        .photo-item img {
+            max-width: 100%;
+            max-height: 200px;
+            object-fit: cover;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: white;
+            font-size: 1.2em;
+        }
+        
+        .btn-refresh {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+            border: none;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            color: white;
+            font-size: 1.5em;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            transition: transform 0.3s ease;
+            z-index: 1000;
+        }
+        
+        .btn-refresh:hover {
+            transform: scale(1.1);
+            background: linear-gradient(45deg, #ee5a24, #ff6b6b);
+        }
+        
+        .marker-popup {
+            max-width: 300px;
+        }
+        
+        .marker-popup img {
+            max-width: 100%;
+            max-height: 150px;
+            object-fit: cover;
+            border-radius: 8px;
+            margin-top: 10px;
+        }
+        
+        .stats-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .error-message {
+            background: rgba(220, 53, 69, 0.9);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 10px 0;
+            text-align: center;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        
+        .loading-spinner {
+            animation: pulse 2s infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <h1 class="main-title">
+            <i class="fas fa-map-marked-alt"></i>
+            Mapa de Reportes GPS
+        </h1>
+        
+        <div class="row">
+            <!-- Columna del mapa -->
+            <div class="col-lg-8">
+                <div id="map"></div>
+            </div>
+            
+            <!-- Columna de estadísticas y fotos -->
+            <div class="col-lg-4">
+                <!-- Estadísticas -->
+                <div class="stats-card">
+                    <h4><i class="fas fa-chart-bar text-primary"></i> Estadísticas</h4>
+                    <div class="row text-center">
+                        <div class="col-6">
+                            <div class="stats-number" id="totalReportes">0</div>
+                            <small class="text-muted">Total Reportes</small>
+                        </div>
+                        <div class="col-6">
+                            <div class="stats-number" id="reportesHoy">0</div>
+                            <small class="text-muted">Hoy</small>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <strong>Último reporte:</strong>
+                        <div id="ultimoReporte" class="text-muted">Cargando...</div>
+                    </div>
+                </div>
+                
+                <!-- Fotos de reportes -->
+                <div class="photo-container">
+                    <h5><i class="fas fa-camera text-primary"></i> Fotos Recientes</h5>
+                    <div id="photosContainer">
+                        <div class="loading loading-spinner">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            Cargando fotos...
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Botón de actualizar -->
+    <button class="btn btn-refresh" onclick="cargarReportes()" title="Actualizar datos">
+        <i class="fas fa-sync-alt"></i>
+    </button>
+    
+    <!-- Modal para ver fotos en grande -->
+    <div class="modal fade" id="photoModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Foto del Reporte</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <img id="modalImage" src="" class="img-fluid" style="max-height: 70vh;">
+                    <div id="modalInfo" class="mt-3"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // Configuración del mapa
+        const API_BASE_URL = 'http://localhost:8000';
+        let map;
+        let markersGroup;
+        
+        // Inicializar el mapa
+        function initMap() {
+            // Crear el mapa centrado en Barranquilla
+            map = L.map('map').setView([10.9639, -74.7964], 12);
+            
+            // Añadir capa de mapa (OpenStreetMap)
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 18
+            }).addTo(map);
+            
+            // Grupo de marcadores para fácil gestión
+            markersGroup = L.layerGroup().addTo(map);
+        }
+        
+        // Cargar reportes desde la API
+        async function cargarReportes() {
+            try {
+                showLoading(true);
+                
+                // Obtener reportes
+                const response = await fetch(`${API_BASE_URL}/reportes/`);
+                if (!response.ok) {
+                    throw new Error(`Error ${response.status}: ${response.statusText}`);
+                }
+                
+                const reportes = await response.json();
+                
+                // Obtener estadísticas
+                const statsResponse = await fetch(`${API_BASE_URL}/stats`);
+                const stats = statsResponse.ok ? await statsResponse.json() : null;
+                
+                // Actualizar mapa
+                actualizarMapa(reportes);
+                
+                // Actualizar estadísticas
+                actualizarEstadisticas(stats, reportes);
+                
+                // Actualizar fotos
+                actualizarFotos(reportes);
+                
+                showError(null);
+                
+            } catch (error) {
+                console.error('Error al cargar reportes:', error);
+                showError(`Error al cargar datos: ${error.message}`);
+            } finally {
+                showLoading(false);
+            }
+        }
+        
+        // Actualizar marcadores en el mapa
+        function actualizarMapa(reportes) {
+            // Limpiar marcadores existentes
+            markersGroup.clearLayers();
+            
+            if (reportes.length === 0) {
+                return;
+            }
+            
+            // Añadir marcadores para cada reporte
+            reportes.forEach((reporte, index) => {
+                const marker = L.marker([reporte.latitud, reporte.longitud]);
+                
+                // Crear popup con información del reporte
+                const popupContent = `
+                    <div class="marker-popup">
+                        <h6><i class="fas fa-map-marker-alt text-danger"></i> Reporte #${reporte.id}</h6>
+                        <p><strong>Fecha:</strong> ${formatearFecha(reporte.timestamp)}</p>
+                        <p><strong>Coordenadas:</strong> ${reporte.latitud.toFixed(6)}, ${reporte.longitud.toFixed(6)}</p>
+                        ${reporte.descripcion ? `<p><strong>Descripción:</strong> ${reporte.descripcion}</p>` : ''}
+                        <p><strong>Tipo:</strong> ${reporte.tipo_reporte}</p>
+                        ${reporte.foto_base64 ? `<img src="data:image/jpeg;base64,${reporte.foto_base64}" onclick="mostrarFotoModal('${reporte.foto_base64}', ${reporte.id}, '${reporte.timestamp}')" style="cursor: pointer;" title="Click para ver en grande">` : ''}
+                    </div>
+                `;
+                
+                marker.bindPopup(popupContent);
+                markersGroup.addLayer(marker);
+            });
+            
+            // Ajustar vista del mapa para mostrar todos los marcadores
+            if (reportes.length > 0) {
+                const group = new L.featureGroup(markersGroup.getLayers());
+                map.fitBounds(group.getBounds().pad(0.1));
+            }
+        }
+        
+        // Actualizar estadísticas
+        function actualizarEstadisticas(stats, reportes) {
+            const total = stats ? stats.total_reportes : reportes.length;
+            const hoy = contarReportesHoy(reportes);
+            const ultimo = stats ? stats.ultimo_reporte : (reportes.length > 0 ? reportes[0].timestamp : null);
+            
+            document.getElementById('totalReportes').textContent = total;
+            document.getElementById('reportesHoy').textContent = hoy;
+            document.getElementById('ultimoReporte').textContent = ultimo ? formatearFecha(ultimo) : 'Sin reportes';
+        }
+        
+        // Actualizar fotos
+        function actualizarFotos(reportes) {
+            const container = document.getElementById('photosContainer');
+            
+            if (reportes.length === 0) {
+                container.innerHTML = '<p class="text-muted">No hay reportes con fotos</p>';
+                return;
+            }
+            
+            const fotosHTML = reportes
+                .filter(r => r.foto_base64)
+                .slice(0, 5) // Mostrar solo las 5 más recientes
+                .map(reporte => `
+                    <div class="photo-item">
+                        <img src="data:image/jpeg;base64,${reporte.foto_base64}" 
+                             onclick="mostrarFotoModal('${reporte.foto_base64}', ${reporte.id}, '${reporte.timestamp}')"
+                             title="Reporte #${reporte.id}">
+                        <small class="d-block mt-2">
+                            <i class="fas fa-calendar"></i> ${formatearFecha(reporte.timestamp)}
+                            <br>
+                            <i class="fas fa-map-marker-alt"></i> ${reporte.latitud.toFixed(4)}, ${reporte.longitud.toFixed(4)}
+                        </small>
+                    </div>
+                `).join('');
+                
+            container.innerHTML = fotosHTML || '<p class="text-muted">No hay fotos disponibles</p>';
+        }
+        
+        // Mostrar foto en modal
+        function mostrarFotoModal(fotoBase64, id, timestamp) {
+            document.getElementById('modalImage').src = `data:image/jpeg;base64,${fotoBase64}`;
+            document.getElementById('modalInfo').innerHTML = `
+                <strong>Reporte #${id}</strong><br>
+                <small class="text-muted">${formatearFecha(timestamp)}</small>
+            `;
+            
+            const modal = new bootstrap.Modal(document.getElementById('photoModal'));
+            modal.show();
+        }
+        
+        // Funciones auxiliares
+        function formatearFecha(timestamp) {
+            try {
+                const fecha = new Date(timestamp);
+                return fecha.toLocaleString('es-ES', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            } catch (error) {
+                return timestamp;
+            }
+        }
+        
+        function contarReportesHoy(reportes) {
+            const hoy = new Date();
+            hoy.setHours(0, 0, 0, 0);
+            
+            return reportes.filter(reporte => {
+                const fechaReporte = new Date(reporte.timestamp);
+                fechaReporte.setHours(0, 0, 0, 0);
+                return fechaReporte.getTime() === hoy.getTime();
+            }).length;
+        }
+        
+        function showLoading(show) {
+            const container = document.getElementById('photosContainer');
+            if (show && !container.querySelector('.loading')) {
+                container.innerHTML = `
+                    <div class="loading loading-spinner">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        Cargando datos...
+                    </div>
+                `;
+            }
+        }
+        
+        function showError(message) {
+            const existingError = document.querySelector('.error-message');
+            if (existingError) {
+                existingError.remove();
+            }
+            
+            if (message) {
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'error-message';
+                errorDiv.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${message}`;
+                document.querySelector('.container-fluid').insertBefore(errorDiv, document.querySelector('.row'));
+            }
+        }
+        
+        // Inicializar la aplicación
+        document.addEventListener('DOMContentLoaded', function() {
+            initMap();
+            cargarReportes();
+            
+            // Actualizar automáticamente cada 30 segundos
+            setInterval(cargarReportes, 30000);
+        });
+        
+        // Manejar errores de conexión
+        window.addEventListener('online', function() {
+            showError(null);
+            cargarReportes();
+        });
+        
+        window.addEventListener('offline', function() {
+            showError('Sin conexión a internet. Los datos pueden estar desactualizados.');
+        });
+    </script>
+</body>
+</html>

@@ -203,9 +203,9 @@ async def estadisticas():
 if __name__ == "__main__":
     import uvicorn
     print("🚀 Iniciando servidor...")
-    print("📍 API: http://localhost:8000")
-    print("📚 Docs: http://localhost:8000/docs")
-    print("🗺️ Mapa: http://localhost:8000/mapa")
-    uvicorn.run(app, host="127.0.0.1", port=8000, reload=True)
+    print("📍 API: http://localhost:5000")
+    print("📚 Docs: http://localhost:5000/docs")
+    print("🗺️ Mapa: http://localhost:5000/mapa")
+    uvicorn.run(app, host="0.0.0.0", port=5000, reload=True)
 
-    print("primer pull request")
+    print("segundo pull request")

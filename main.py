@@ -208,4 +208,5 @@ if __name__ == "__main__":
     print("🗺️ Mapa: http://localhost:5000/mapa")
     uvicorn.run(app, host="0.0.0.0", port=5000, reload=True)
 
+    
     print("segundo pull request")

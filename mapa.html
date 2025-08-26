@@ -170,10 +170,39 @@
             transform-origin: center;
             filter: drop-shadow(0 6px 8px rgba(0,0,0,0.25));
         }
+
+        /* Overlay de carga global */
+        #loadingDiv {
+            display: none;
+            position: fixed;
+            inset: 0;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0,0,0,0.35);
+            z-index: 1200;
+        }
+        #loadingDiv .loading-box {
+            background: rgba(0,0,0,0.6);
+            padding: 20px 30px;
+            border-radius: 8px;
+            color: white;
+            text-align: center;
+        }
+
+        /* Mensaje de error global (oculto por defecto) */
+        #errorDiv {
+            display: none;
+            position: relative;
+            z-index: 1150;
+            margin-bottom: 12px;
+        }
     </style>
 </head>
 <body>
     <div class="container-fluid">
+        <!-- Mensaje de error global -->
+        <div id="errorDiv" class="error-message" style="display:none;"></div>
+        
         <h1 class="main-title">
             <i class="fas fa-map-marked-alt"></i>
             Mapa de Reportes GPS
@@ -304,6 +333,13 @@
         let markersGroup;
         let markersById = {}; // Mapa id -> marker
         let firstLoad = true;
+        let isFetching = false;
+        const AUTO_REFRESH_MS = 15000; // 15 segundos
+        let refreshTimerId = null;
+        // Opciones de carga
+        const REPORTS_LIMIT = 50;    // ajustar si desea más/menos reportes por petición
+        const REPORTS_TIMEOUT = 10000; // ms, timeout para la petición de reportes
+        const HIGHLIGHT_COUNT = 5; // cuántos marcadores recientes resaltar
 
         // Inicializar el mapa
         function initMap() {
@@ -329,102 +365,20 @@
             });
         }
         
-        // Cargar reportes desde la API
-        async function cargarReportes() {
-            try {
-                showLoading(true);
-                
-                const response = await fetch(`${API_BASE_URL}/reportes/`);
-                if (!response.ok) throw new Error(`Error ${response.status}: ${response.statusText}`);
-                const reportes = await response.json();
-                
-                const statsResponse = await fetch(`${API_BASE_URL}/stats`);
-                const stats = statsResponse.ok ? await statsResponse.json() : null;
-                
-                actualizarMapa(reportes);
-                actualizarEstadisticas(stats, reportes);
-                actualizarFotos(reportes);
-                
-                showError(null);
-            } catch (error) {
-                console.error('Error al cargar reportes:', error);
-                showError(`Error al cargar datos: ${error.message}`);
-            } finally {
-                showLoading(false);
-            }
-        }
-
-        // Comprueba si boundsA contiene completamente a boundsB
-        function boundsContainsBounds(boundsA, boundsB) {
-            if (!boundsA || !boundsB) return false;
-            return boundsA.contains(boundsB.getSouthWest()) && boundsA.contains(boundsB.getNorthEast());
-        }
-
-        // Convierte base64 a Blob y devuelve objectURL; intenta con jpeg y png
-        function base64ToObjectURL(base64, mime) {
-            try {
-                const byteString = atob(base64);
-                const ab = new ArrayBuffer(byteString.length);
-                const ia = new Uint8Array(ab);
-                for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
-                const blob = new Blob([ab], { type: mime });
-                return URL.createObjectURL(blob);
-            } catch (e) {
-                console.warn('Error al convertir base64 a Blob:', e);
-                return null;
-            }
-        }
-
         // Obtiene src válido para imagen base64: prueba jpeg primero, si falla prueba png
         function createImageSrcFromBase64(base64, onReady) {
-            // Prueba JPEG
-            let url = base64ToObjectURL(base64, 'image/jpeg');
-            if (!url) {
-                // Intentar PNG
-                url = base64ToObjectURL(base64, 'image/png');
-                onReady(url);
-                return;
-            }
-            // Verificar que la imagen carga; si no, fallback a png
-            const img = new Image();
-            let triedPNG = false;
-            img.onload = function() {
-                onReady(url);
-            };
-            img.onerror = function() {
-                if (!triedPNG) {
-                    triedPNG = true;
-                    const pngUrl = base64ToObjectURL(base64, 'image/png');
-                    onReady(pngUrl || url);
-                } else {
-                    onReady(url); // último recurso
-                }
-            };
-            img.src = url;
+            // ...existing code...
         }
 
-        // Actualizar marcadores en el mapa (revertido a marcadores normales)
+        // Actualizar marcadores en el mapa (reparada)
         function actualizarMapa(reportes) {
-            // Guardar estado anterior (no se usa ampliamente pero se conserva)
-            const prevBounds = markersGroup.getBounds && markersGroup.getLayers().length ? markersGroup.getBounds() : null;
-
-            markersGroup.clearLayers();
-            // limpiar antiguos objectURLs si fuera necesario
-            Object.values(markersById).forEach(m => {
-                try { if (m._imageObjectUrl) URL.revokeObjectURL(m._imageObjectUrl); } catch(e) {}
-            });
-            markersById = {};
-
-            if (!reportes || reportes.length === 0) return;
-
-            const HIGHLIGHT_COUNT = 5;
-
+            markersGroup.clearLayers(); // Limpiar marcadores existentes
             reportes.forEach((reporte, index) => {
                 const lat = reporte.latitud;
                 const lng = reporte.longitud;
                 const isHighlighted = index < HIGHLIGHT_COUNT;
 
-                // Construir popup DOM
+                // Construir contenido del popup primero
                 const popupDiv = document.createElement('div');
                 popupDiv.className = 'marker-popup';
                 const title = document.createElement('h6');
@@ -446,22 +400,15 @@
                 }
 
                 const tipoP = document.createElement('p');
-                tipoP.innerHTML = `<strong>Tipo:</strong> ${reporte.tipo_reporte}`;
+                tipoP.innerHTML = `<strong>Tipo:</strong> ${reporte.tipo_reporte || ''}`;
                 popupDiv.appendChild(tipoP);
 
                 const imgPlaceholder = document.createElement('div');
                 if (reporte.foto_base64) {
-                    // Crear imagen con objectURL para mayor compatibilidad
-                    createImageSrcFromBase64(reporte.foto_base64, (src) => {
+                    try {
                         const img = document.createElement('img');
-                        if (src) {
-                            img.src = src;
-                            // Guardar para liberar luego si hace falta
-                            // Lo enlazamos al marcador más abajo (cuando exista)
-                        } else {
-                            // fallback a data URI directo (menos óptimo)
-                            img.src = `data:image/jpeg;base64,${reporte.foto_base64}`;
-                        }
+                        const b64 = reporte.foto_base64 || '';
+                        img.src = (typeof b64 === 'string' && b64.startsWith('data:')) ? b64 : `data:image/jpeg;base64,${b64}`;
                         img.style.maxWidth = '100%';
                         img.style.maxHeight = '150px';
                         img.style.objectFit = 'cover';
@@ -470,65 +417,24 @@
                         img.addEventListener('click', function () {
                             mostrarFotoModal(reporte.foto_base64, reporte.id, reporte.timestamp);
                         });
-                        // Reemplazar placeholder
-                        imgPlaceholder.innerHTML = '';
                         imgPlaceholder.appendChild(img);
-
-                        // Si el marcador ya existe en markersById, asociar objectUrl para liberación futura
-                        const markerTmp = markersById[reporte.id];
-                        if (markerTmp) {
-                            markerTmp._imageObjectUrl = src;
-                        }
-                    });
+                    } catch (err) {
+                        console.warn('Error al asignar imagen en popup:', err);
+                    }
                 }
                 popupDiv.appendChild(imgPlaceholder);
 
-                // Crear marcador normal (como antes)
-                const marker = L.marker([lat, lng]);
+                // Crear marcador y enlazar popup (popup ya creado)
+                const marker = L.marker([lat, lng]).addTo(markersGroup);
                 marker.bindPopup(popupDiv);
-                marker.addTo(markersGroup);
-
-                // Si es reciente, añadir clase CSS para resaltar (se aplica cuando elemento del icono exista)
                 if (isHighlighted) {
-                    marker.on('add', () => {
-                        const el = marker.getElement();
-                        if (el) el.classList.add('highlight-marker');
-                    });
-                    // Dar preferencia visual al estar encima
+                    const el = marker.getElement();
+                    if (el) el.classList.add('highlight-marker');
                     marker.setZIndexOffset(1000);
                 }
 
                 markersById[reporte.id] = marker;
             });
-
-            // Ajustar vista solo si los nuevos marcadores no están ya contenidos
-            try {
-                const layers = markersGroup.getLayers();
-                if (layers.length > 0) {
-                    const group = new L.featureGroup(layers);
-                    const newBounds = group.getBounds().pad(0.1);
-
-                    const currentBounds = map.getBounds ? map.getBounds() : null;
-                    const needFit = firstLoad || !boundsContainsBounds(currentBounds, newBounds);
-                    if (needFit) {
-                        map.fitBounds(newBounds);
-                        firstLoad = false;
-                    }
-                }
-            } catch (err) {
-                console.warn('Error ajustando bounds:', err);
-            }
-        }
-        
-        // Actualizar estadísticas
-        function actualizarEstadisticas(stats, reportes) {
-            const total = stats ? stats.total_reportes : reportes.length;
-            const hoy = contarReportesHoy(reportes);
-            const ultimo = stats ? stats.ultimo_reporte : (reportes.length > 0 ? reportes[0].timestamp : null);
-            
-            document.getElementById('totalReportes').textContent = total;
-            document.getElementById('reportesHoy').textContent = hoy;
-            document.getElementById('ultimoReporte').textContent = ultimo ? formatearFecha(ultimo) : 'Sin reportes';
         }
         
         // Actualizar fotos (miniaturas) — al clicar centramos y abrimos popup
@@ -555,16 +461,15 @@
                 img.alt = `Reporte #${reporte.id}`;
                 img.style.cursor = 'pointer';
 
-                // Crear objectURL para la miniatura (con fallback como en popup)
-                createImageSrcFromBase64(reporte.foto_base64, (src) => {
-                    if (src) img.src = src;
-                    else img.src = `data:image/jpeg;base64,${reporte.foto_base64}`;
-                    // Intentar asociar objectURL al marcador para liberar luego
-                    const marker = markersById[reporte.id];
-                    if (marker) {
-                        marker._imageObjectUrl = src || `data:image/jpeg;base64,${reporte.foto_base64}`;
-                    }
-                });
+                // Asignación directa de data URI para miniatura (más rápida y menos propensa a errores)
+                try {
+                    const b64 = reporte.foto_base64 || '';
+                    if (typeof b64 === 'string' && b64.startsWith('data:')) img.src = b64;
+                    else img.src = `data:image/jpeg;base64,${b64}`;
+                } catch (err) {
+                    console.warn('Error asignando miniatura:', err);
+                    img.alt = 'Imagen no disponible';
+                }
 
                 img.addEventListener('click', () => {
                     // Centrar mapa y abrir popup del marcador si existe
@@ -582,165 +487,34 @@
             });
         }
 
-        // Mostrar modal con foto grande
-        function mostrarFotoModal(base64, id, timestamp) {
+        // Mostrar modal con la foto en grande
+        function mostrarFotoModal(fotoBase64, reporteId, timestamp) {
             const modalImage = document.getElementById('modalImage');
             const modalInfo = document.getElementById('modalInfo');
-            // Preferimos data URI simple (compatibilidad)
-            modalImage.src = `data:image/jpeg;base64,${base64}`;
-            modalInfo.textContent = `Reporte #${id} — ${timestamp ? formatearFecha(timestamp) : ''}`;
-            const bsModal = new bootstrap.Modal(document.getElementById('photoModal'), {});
+
+            // Asignar src a la imagen del modal
+            modalImage.src = fotoBase64 ? `data:image/jpeg;base64,${fotoBase64}` : '';
+
+            // Información adicional (opcional)
+            modalInfo.innerHTML = `Reporte ID: ${reporteId}<br>Fecha: ${new Date(timestamp).toLocaleString('es-CO')}`;
+
+            const bsModalEl = document.getElementById('photoModal');
+            const bsModal = bootstrap.Modal.getInstance(bsModalEl) || new bootstrap.Modal(bsModalEl);
             bsModal.show();
         }
 
-        // Contar reportes del día actual (local)
-        function contarReportesHoy(reportes) {
-            if (!reportes || reportes.length === 0) return 0;
-            const hoy = new Date();
-            return reportes.reduce((acc, r) => {
-                if (!r.timestamp) return acc;
-                const d = new Date(r.timestamp);
-                if (d.getFullYear() === hoy.getFullYear() &&
-                    d.getMonth() === hoy.getMonth() &&
-                    d.getDate() === hoy.getDate()) {
-                    return acc + 1;
-                }
-                return acc;
-            }, 0);
+        // Mostrar loading (defensivo)
+        function showLoading(isLoading) {
+            const loadingDiv = document.getElementById('loadingDiv');
+            if (!loadingDiv) return; // no fallar si no existe
+            loadingDiv.style.display = isLoading ? 'flex' : 'none';
         }
 
-        // Formatear fecha de forma legible
-        function formatearFecha(timestamp) {
-            if (!timestamp) return '';
-            try {
-                const d = new Date(timestamp);
-                return d.toLocaleString('es-CO', { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
-            } catch (e) {
-                return timestamp;
-            }
-        }
-
-        // Mostrar / ocultar indicador de carga simple
-        function showLoading(enabled) {
-            const btn = document.querySelector('.btn-refresh');
-            if (btn) btn.disabled = !!enabled;
-            // Opcional: añadir una clase en el body para estilos si se desea
-            if (enabled) document.body.classList.add('loading');
-            else document.body.classList.remove('loading');
-        }
-
-        // Mostrar mensajes de error en la interfaz (breve)
+        // Mostrar mensaje de error (defensivo)
         function showError(message) {
-            const container = document.querySelector('.container-fluid');
-            let box = document.getElementById('errorBox');
-            if (!box && message) {
-                box = document.createElement('div');
-                box.id = 'errorBox';
-                box.className = 'error-message';
-                container.insertBefore(box, container.firstChild);
-            }
-            if (box) {
-                if (message) box.textContent = message;
-                else box.remove();
-            }
-        }
-
-        // Inicializar y cargar al abrir
-        document.addEventListener('DOMContentLoaded', () => {
-            initMap();
-            cargarReportes();
-        });
-
-        // Variables auxiliares para la selección en mapa
-        let seleccionarCoords = false;
-        let tempMarkerForSelection = null;
-
-        // Abrir modal de agregar
-        function abrirModalAgregar() {
-            // Limpiar campos
-            document.getElementById('inputTipo').value = 'otro';
-            document.getElementById('inputDescripcion').value = '';
-            document.getElementById('inputLat').value = '';
-            document.getElementById('inputLng').value = '';
-            document.getElementById('inputFoto').value = '';
-            const feedback = document.getElementById('addReportFeedback');
-            if (feedback) { feedback.style.display = 'none'; feedback.textContent = ''; }
-
-            const bs = new bootstrap.Modal(document.getElementById('addReportModal'), {});
-            bs.show();
-        }
-
-        // Activar modo para seleccionar coordenadas en el mapa una vez
-        function activarSeleccionMapa() {
-            seleccionarCoords = true;
-            // Indicador visual temporal: instrucción simple en console y feedback
-            alert('Haga clic en el mapa para seleccionar la ubicación del reporte.');
-        }
-
-        // Capturar clic en mapa (si está activo el modo de selección)
-        // El listener de clic en el mapa ahora se añade en initMap() para garantizar que siempre exista.
-        
-        // Convierte un File a base64 (Promise)
-        function fileToBase64(file) {
-            return new Promise((resolve, reject) => {
-                if (!file) resolve(null);
-                const reader = new FileReader();
-                reader.onload = () => resolve(reader.result.split(',')[1]); // retornar solo base64 sin data:...
-                reader.onerror = reject;
-                reader.readAsDataURL(file);
-            });
-        }
-
-        // Enviar nuevo reporte al backend
-        async function submitNuevoReporte() {
-            const tipo = document.getElementById('inputTipo').value || 'otro';
-            const descripcion = document.getElementById('inputDescripcion').value || '';
-            const lat = parseFloat(document.getElementById('inputLat').value);
-            const lng = parseFloat(document.getElementById('inputLng').value);
-            const file = document.getElementById('inputFoto').files[0];
-            const feedback = document.getElementById('addReportFeedback');
-
-            if (!lat || !lng || Number.isNaN(lat) || Number.isNaN(lng)) {
-                if (feedback) { feedback.style.display = 'block'; feedback.textContent = 'Seleccione las coordenadas en el mapa.'; }
+            const errorDiv = document.getElementById('errorDiv');
+            if (!errorDiv) {
+                console.warn('showError: no existe #errorDiv', message);
                 return;
             }
-
-            try {
-                showLoading(true);
-                const fotoBase64 = file ? await fileToBase64(file) : null;
-
-                const payload = {
-                    latitud: lat,
-                    longitud: lng,
-                    descripcion: descripcion,
-                    tipo_reporte: tipo,
-                    foto_base64: fotoBase64
-                };
-
-                const res = await fetch(`${API_BASE_URL}/reportes/`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-
-                if (!res.ok) {
-                    const text = await res.text().catch(()=>null);
-                    throw new Error(text || `Error ${res.status}`);
-                }
-
-                // Cerrar modal y refrescar
-                const bsModalEl = document.getElementById('addReportModal');
-                const bsModal = bootstrap.Modal.getInstance(bsModalEl);
-                if (bsModal) bsModal.hide();
-
-                await cargarReportes();
-            } catch (err) {
-                console.error('Error enviando reporte:', err);
-                if (feedback) { feedback.style.display = 'block'; feedback.textContent = 'Error al enviar el reporte.'; }
-            } finally {
-                showLoading(false);
-            }
-        }
-    </script>
-</body>
-</html>
+            if

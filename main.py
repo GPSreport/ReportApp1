@@ -29,7 +29,7 @@ class ReporteCreate(BaseModel):
     latitud: float
     longitud: float
     timestamp: Optional[str] = None
-    foto_base64: str
+    foto_base64: Optional[str] = None
     descripcion: Optional[str] = None
     tipo_reporte: Optional[str] = "general"
 
@@ -38,7 +38,7 @@ class ReporteResponse(BaseModel):
     latitud: float
     longitud: float
     timestamp: str
-    foto_base64: str
+    foto_base64: Optional[str] = None
     descripcion: Optional[str]
     tipo_reporte: str
 
@@ -65,6 +65,8 @@ def init_database():
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     ''')
+    # Crear índice para acelerar ORDER BY created_at DESC en consultas grandes
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_reportes_created_at ON reportes(created_at DESC)')
     
     conn.commit()
     conn.close()
@@ -115,6 +117,10 @@ async def crear_reporte(reporte: ReporteCreate):
         if not reporte.timestamp:
             reporte.timestamp = datetime.now().isoformat()
         
+        # Normalizar foto_base64: si viene None -> convertir a cadena vacía
+        # (evita errores si la columna en DB es NOT NULL en instalaciones existentes)
+        foto_val = reporte.foto_base64 if reporte.foto_base64 is not None else ""
+        
         # Insertar en BD
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -126,7 +132,7 @@ async def crear_reporte(reporte: ReporteCreate):
             reporte.latitud,
             reporte.longitud,
             reporte.timestamp,
-            reporte.foto_base64,
+            foto_val,
             reporte.descripcion,
             reporte.tipo_reporte
         ))
@@ -140,7 +146,7 @@ async def crear_reporte(reporte: ReporteCreate):
             latitud=reporte.latitud,
             longitud=reporte.longitud,
             timestamp=reporte.timestamp,
-            foto_base64=reporte.foto_base64,
+            foto_base64=foto_val,
             descripcion=reporte.descripcion,
             tipo_reporte=reporte.tipo_reporte
         )
@@ -149,18 +155,20 @@ async def crear_reporte(reporte: ReporteCreate):
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @app.get("/reportes/", response_model=List[ReporteResponse])
-async def obtener_reportes():
+async def obtener_reportes(limit: int = 100):
     """Obtener todos los reportes"""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         
+        # Limitar la cantidad de filas devueltas para evitar payloads gigantes
         cursor.execute('''
         SELECT id, latitud, longitud, timestamp, foto_base64, descripcion, tipo_reporte
         FROM reportes
         ORDER BY created_at DESC
-        ''')
-        
+        LIMIT ?
+        ''', (limit,))
+         
         reportes = []
         for row in cursor.fetchall():
             # Usar acceso por nombre (row_factory) para mayor claridad

@@ -42,12 +42,15 @@ class ReporteResponse(BaseModel):
     descripcion: Optional[str]
     tipo_reporte: str
 
-# Base de datos
-DATABASE_PATH = "reportes.db"
+# Base de datos: usar ruta absoluta relativa al archivo
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATABASE_PATH = os.path.join(BASE_DIR, "reportes.db")
 
 def init_database():
     """Inicializa la base de datos SQLite"""
-    conn = sqlite3.connect(DATABASE_PATH)
+    # Asegurar que el directorio existe
+    os.makedirs(BASE_DIR, exist_ok=True)
+    conn = sqlite3.connect(DATABASE_PATH, check_same_thread=False)
     cursor = conn.cursor()
     
     cursor.execute('''
@@ -68,7 +71,7 @@ def init_database():
 
 def get_db_connection():
     """Obtiene una conexión a la base de datos"""
-    conn = sqlite3.connect(DATABASE_PATH)
+    conn = sqlite3.connect(DATABASE_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -99,7 +102,7 @@ async def root():
 async def mapa():
     """Página web con mapa interactivo"""
     try:
-        with open("mapa.html", "r", encoding="utf-8") as f:
+        with open(os.path.join(BASE_DIR, "mapa.html"), "r", encoding="utf-8") as f:
             return f.read()
     except FileNotFoundError:
         return "<h1>Error: archivo mapa.html no encontrado</h1>"
@@ -160,14 +163,15 @@ async def obtener_reportes():
         
         reportes = []
         for row in cursor.fetchall():
+            # Usar acceso por nombre (row_factory) para mayor claridad
             reportes.append(ReporteResponse(
-                id=row[0],
-                latitud=row[1],
-                longitud=row[2],
-                timestamp=row[3],
-                foto_base64=row[4],
-                descripcion=row[5],
-                tipo_reporte=row[6]
+                id=row["id"],
+                latitud=row["latitud"],
+                longitud=row["longitud"],
+                timestamp=row["timestamp"],
+                foto_base64=row["foto_base64"],
+                descripcion=row["descripcion"],
+                tipo_reporte=row["tipo_reporte"]
             ))
         
         conn.close()
@@ -183,12 +187,12 @@ async def estadisticas():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        cursor.execute("SELECT COUNT(*) FROM reportes")
-        total = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) as total FROM reportes")
+        total = cursor.fetchone()["total"]
         
         cursor.execute("SELECT timestamp FROM reportes ORDER BY created_at DESC LIMIT 1")
-        ultimo = cursor.fetchone()
-        ultimo = ultimo[0] if ultimo else None
+        ultimo_row = cursor.fetchone()
+        ultimo = ultimo_row["timestamp"] if ultimo_row else None
         
         conn.close()
         
@@ -203,7 +207,8 @@ async def estadisticas():
 if __name__ == "__main__":
     import uvicorn
     print("🚀 Iniciando servidor...")
-    print("📍 API: http://localhost:8000")
-    print("📚 Docs: http://localhost:8000/docs")
-    print("🗺️ Mapa: http://localhost:8000/mapa")
-    uvicorn.run(app, host="127.0.0.1", port=8000, reload=True)
+    print(f"📍 DB path: {DATABASE_PATH}")
+    print("📍 API: http://localhost:5000")
+    print("📚 Docs: http://localhost:5000/docs")
+    print("🗺️ Mapa: http://localhost:5000/mapa")
+    uvicorn.run(app, host="0.0.0.0", port=5000, reload=True)

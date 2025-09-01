@@ -43,7 +43,7 @@ class ReporteCreate(BaseModel):
     latitud: float
     longitud: float
     timestamp: Optional[str] = None
-    foto_base64: str
+    foto_base64: Optional[str] = None
     descripcion: Optional[str] = None
     tipo_reporte: Optional[str] = "general"
 

@@ -108,6 +108,24 @@
             transform: scale(1.1);
             background: linear-gradient(45deg, #ee5a24, #ff6b6b);
         }
+
+        /* Nuevo botón agregar (esquina izquierda inferior) */
+        .btn-add {
+            position: fixed;
+            bottom: 30px;
+            left: 30px;
+            background: linear-gradient(45deg, #38b000, #2d6a4f);
+            border: none;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            color: white;
+            font-size: 1.3em;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            transition: transform 0.2s ease;
+            z-index: 1000;
+        }
+        .btn-add:hover { transform: scale(1.06); }
         
         .marker-popup {
             max-width: 300px;
@@ -144,6 +162,13 @@
         
         .loading-spinner {
             animation: pulse 2s infinite;
+        }
+
+        /* Resalte para marcadores recientes */
+        .leaflet-marker-icon.highlight-marker {
+            animation: pulse 1.6s infinite;
+            transform-origin: center;
+            filter: drop-shadow(0 6px 8px rgba(0,0,0,0.25));
         }
     </style>
 </head>
@@ -199,7 +224,12 @@
     <button class="btn btn-refresh" onclick="cargarReportes()" title="Actualizar datos">
         <i class="fas fa-sync-alt"></i>
     </button>
-    
+
+    <!-- Nuevo: Botón para agregar reporte -->
+    <button class="btn btn-add" onclick="abrirModalAgregar()" title="Agregar reporte">
+        <i class="fas fa-plus"></i>
+    </button>
+
     <!-- Modal para ver fotos en grande -->
     <div class="modal fade" id="photoModal" tabindex="-1">
         <div class="modal-dialog modal-lg">
@@ -215,7 +245,52 @@
             </div>
         </div>
     </div>
-    
+
+    <!-- Nuevo: Modal para agregar reporte -->
+    <div class="modal fade" id="addReportModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Agregar nuevo reporte</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-2">
+                        <label class="form-label">Tipo de reporte</label>
+                        <select id="inputTipo" class="form-select">
+                            <option value="otro">Otro</option>
+                            <option value="incidente">Incidente</option>
+                            <option value="obstruccion">Obstrucción</option>
+                            <option value="alerta">Alerta</option>
+                        </select>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Descripción</label>
+                        <textarea id="inputDescripcion" class="form-control" rows="3"></textarea>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Coordenadas (seleccione en el mapa)</label>
+                        <div class="input-group">
+                            <input id="inputLat" class="form-control" placeholder="Latitud">
+                            <input id="inputLng" class="form-control" placeholder="Longitud">
+                        </div>
+                        <div class="form-text">Haga clic en "Seleccionar en mapa" y luego en el mapa para fijar la ubicación.</div>
+                        <button class="btn btn-sm btn-outline-primary mt-2" onclick="activarSeleccionMapa()">Seleccionar en mapa</button>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label">Foto (opcional)</label>
+                        <input id="inputFoto" type="file" accept="image/*" class="form-control">
+                    </div>
+                    <div id="addReportFeedback" class="text-danger small" style="display:none;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button class="btn btn-primary" onclick="submitNuevoReporte()">Enviar reporte</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
@@ -224,23 +299,34 @@
     
     <script>
         // Configuración del mapa
-        const API_BASE_URL = 'http://localhost:8000';
+        const API_BASE_URL = window.location.origin; 
         let map;
         let markersGroup;
-        
+        let markersById = {}; // Mapa id -> marker
+        let firstLoad = true;
+
         // Inicializar el mapa
         function initMap() {
-            // Crear el mapa centrado en Barranquilla
             map = L.map('map').setView([10.9639, -74.7964], 12);
-            
-            // Añadir capa de mapa (OpenStreetMap)
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenStreetMap contributors',
                 maxZoom: 18
             }).addTo(map);
-            
-            // Grupo de marcadores para fácil gestión
             markersGroup = L.layerGroup().addTo(map);
+
+            // Listener de clic en el mapa: si estamos en modo selección, rellenar lat/lng y colocar marcador temporal.
+            map.on('click', function(e) {
+                if (!seleccionarCoords) return;
+                const lat = e.latlng.lat;
+                const lng = e.latlng.lng;
+                document.getElementById('inputLat').value = lat.toFixed(6);
+                document.getElementById('inputLng').value = lng.toFixed(6);
+                seleccionarCoords = false;
+                // marcador temporal (se elimina después)
+                if (tempMarkerForSelection) { markersGroup.removeLayer(tempMarkerForSelection); tempMarkerForSelection = null; }
+                tempMarkerForSelection = L.marker([lat, lng]).addTo(markersGroup);
+                setTimeout(()=>{ if (tempMarkerForSelection) { markersGroup.removeLayer(tempMarkerForSelection); tempMarkerForSelection = null; } }, 5000);
+            });
         }
         
         // Cargar reportes desde la API
@@ -248,29 +334,18 @@
             try {
                 showLoading(true);
                 
-                // Obtener reportes
                 const response = await fetch(`${API_BASE_URL}/reportes/`);
-                if (!response.ok) {
-                    throw new Error(`Error ${response.status}: ${response.statusText}`);
-                }
-                
+                if (!response.ok) throw new Error(`Error ${response.status}: ${response.statusText}`);
                 const reportes = await response.json();
                 
-                // Obtener estadísticas
                 const statsResponse = await fetch(`${API_BASE_URL}/stats`);
                 const stats = statsResponse.ok ? await statsResponse.json() : null;
                 
-                // Actualizar mapa
                 actualizarMapa(reportes);
-                
-                // Actualizar estadísticas
                 actualizarEstadisticas(stats, reportes);
-                
-                // Actualizar fotos
                 actualizarFotos(reportes);
                 
                 showError(null);
-                
             } catch (error) {
                 console.error('Error al cargar reportes:', error);
                 showError(`Error al cargar datos: ${error.message}`);
@@ -278,40 +353,170 @@
                 showLoading(false);
             }
         }
-        
-        // Actualizar marcadores en el mapa
-        function actualizarMapa(reportes) {
-            // Limpiar marcadores existentes
-            markersGroup.clearLayers();
-            
-            if (reportes.length === 0) {
+
+        // Comprueba si boundsA contiene completamente a boundsB
+        function boundsContainsBounds(boundsA, boundsB) {
+            if (!boundsA || !boundsB) return false;
+            return boundsA.contains(boundsB.getSouthWest()) && boundsA.contains(boundsB.getNorthEast());
+        }
+
+        // Convierte base64 a Blob y devuelve objectURL; intenta con jpeg y png
+        function base64ToObjectURL(base64, mime) {
+            try {
+                const byteString = atob(base64);
+                const ab = new ArrayBuffer(byteString.length);
+                const ia = new Uint8Array(ab);
+                for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+                const blob = new Blob([ab], { type: mime });
+                return URL.createObjectURL(blob);
+            } catch (e) {
+                console.warn('Error al convertir base64 a Blob:', e);
+                return null;
+            }
+        }
+
+        // Obtiene src válido para imagen base64: prueba jpeg primero, si falla prueba png
+        function createImageSrcFromBase64(base64, onReady) {
+            // Prueba JPEG
+            let url = base64ToObjectURL(base64, 'image/jpeg');
+            if (!url) {
+                // Intentar PNG
+                url = base64ToObjectURL(base64, 'image/png');
+                onReady(url);
                 return;
             }
-            
-            // Añadir marcadores para cada reporte
-            reportes.forEach((reporte, index) => {
-                const marker = L.marker([reporte.latitud, reporte.longitud]);
-                
-                // Crear popup con información del reporte
-                const popupContent = `
-                    <div class="marker-popup">
-                        <h6><i class="fas fa-map-marker-alt text-danger"></i> Reporte #${reporte.id}</h6>
-                        <p><strong>Fecha:</strong> ${formatearFecha(reporte.timestamp)}</p>
-                        <p><strong>Coordenadas:</strong> ${reporte.latitud.toFixed(6)}, ${reporte.longitud.toFixed(6)}</p>
-                        ${reporte.descripcion ? `<p><strong>Descripción:</strong> ${reporte.descripcion}</p>` : ''}
-                        <p><strong>Tipo:</strong> ${reporte.tipo_reporte}</p>
-                        ${reporte.foto_base64 ? `<img src="data:image/jpeg;base64,${reporte.foto_base64}" onclick="mostrarFotoModal('${reporte.foto_base64}', ${reporte.id}, '${reporte.timestamp}')" style="cursor: pointer;" title="Click para ver en grande">` : ''}
-                    </div>
-                `;
-                
-                marker.bindPopup(popupContent);
-                markersGroup.addLayer(marker);
+            // Verificar que la imagen carga; si no, fallback a png
+            const img = new Image();
+            let triedPNG = false;
+            img.onload = function() {
+                onReady(url);
+            };
+            img.onerror = function() {
+                if (!triedPNG) {
+                    triedPNG = true;
+                    const pngUrl = base64ToObjectURL(base64, 'image/png');
+                    onReady(pngUrl || url);
+                } else {
+                    onReady(url); // último recurso
+                }
+            };
+            img.src = url;
+        }
+
+        // Actualizar marcadores en el mapa (revertido a marcadores normales)
+        function actualizarMapa(reportes) {
+            // Guardar estado anterior (no se usa ampliamente pero se conserva)
+            const prevBounds = markersGroup.getBounds && markersGroup.getLayers().length ? markersGroup.getBounds() : null;
+
+            markersGroup.clearLayers();
+            // limpiar antiguos objectURLs si fuera necesario
+            Object.values(markersById).forEach(m => {
+                try { if (m._imageObjectUrl) URL.revokeObjectURL(m._imageObjectUrl); } catch(e) {}
             });
-            
-            // Ajustar vista del mapa para mostrar todos los marcadores
-            if (reportes.length > 0) {
-                const group = new L.featureGroup(markersGroup.getLayers());
-                map.fitBounds(group.getBounds().pad(0.1));
+            markersById = {};
+
+            if (!reportes || reportes.length === 0) return;
+
+            const HIGHLIGHT_COUNT = 5;
+
+            reportes.forEach((reporte, index) => {
+                const lat = reporte.latitud;
+                const lng = reporte.longitud;
+                const isHighlighted = index < HIGHLIGHT_COUNT;
+
+                // Construir popup DOM
+                const popupDiv = document.createElement('div');
+                popupDiv.className = 'marker-popup';
+                const title = document.createElement('h6');
+                title.innerHTML = `<i class="fas fa-map-marker-alt text-danger"></i> Reporte #${reporte.id}`;
+                popupDiv.appendChild(title);
+
+                const fechaP = document.createElement('p');
+                fechaP.innerHTML = `<strong>Fecha:</strong> ${formatearFecha(reporte.timestamp)}`;
+                popupDiv.appendChild(fechaP);
+
+                const coordP = document.createElement('p');
+                coordP.innerHTML = `<strong>Coordenadas:</strong> ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+                popupDiv.appendChild(coordP);
+
+                if (reporte.descripcion) {
+                    const descP = document.createElement('p');
+                    descP.innerHTML = `<strong>Descripción:</strong> ${reporte.descripcion}`;
+                    popupDiv.appendChild(descP);
+                }
+
+                const tipoP = document.createElement('p');
+                tipoP.innerHTML = `<strong>Tipo:</strong> ${reporte.tipo_reporte}`;
+                popupDiv.appendChild(tipoP);
+
+                const imgPlaceholder = document.createElement('div');
+                if (reporte.foto_base64) {
+                    // Crear imagen con objectURL para mayor compatibilidad
+                    createImageSrcFromBase64(reporte.foto_base64, (src) => {
+                        const img = document.createElement('img');
+                        if (src) {
+                            img.src = src;
+                            // Guardar para liberar luego si hace falta
+                            // Lo enlazamos al marcador más abajo (cuando exista)
+                        } else {
+                            // fallback a data URI directo (menos óptimo)
+                            img.src = `data:image/jpeg;base64,${reporte.foto_base64}`;
+                        }
+                        img.style.maxWidth = '100%';
+                        img.style.maxHeight = '150px';
+                        img.style.objectFit = 'cover';
+                        img.style.marginTop = '10px';
+                        img.style.cursor = 'pointer';
+                        img.addEventListener('click', function () {
+                            mostrarFotoModal(reporte.foto_base64, reporte.id, reporte.timestamp);
+                        });
+                        // Reemplazar placeholder
+                        imgPlaceholder.innerHTML = '';
+                        imgPlaceholder.appendChild(img);
+
+                        // Si el marcador ya existe en markersById, asociar objectUrl para liberación futura
+                        const markerTmp = markersById[reporte.id];
+                        if (markerTmp) {
+                            markerTmp._imageObjectUrl = src;
+                        }
+                    });
+                }
+                popupDiv.appendChild(imgPlaceholder);
+
+                // Crear marcador normal (como antes)
+                const marker = L.marker([lat, lng]);
+                marker.bindPopup(popupDiv);
+                marker.addTo(markersGroup);
+
+                // Si es reciente, añadir clase CSS para resaltar (se aplica cuando elemento del icono exista)
+                if (isHighlighted) {
+                    marker.on('add', () => {
+                        const el = marker.getElement();
+                        if (el) el.classList.add('highlight-marker');
+                    });
+                    // Dar preferencia visual al estar encima
+                    marker.setZIndexOffset(1000);
+                }
+
+                markersById[reporte.id] = marker;
+            });
+
+            // Ajustar vista solo si los nuevos marcadores no están ya contenidos
+            try {
+                const layers = markersGroup.getLayers();
+                if (layers.length > 0) {
+                    const group = new L.featureGroup(layers);
+                    const newBounds = group.getBounds().pad(0.1);
+
+                    const currentBounds = map.getBounds ? map.getBounds() : null;
+                    const needFit = firstLoad || !boundsContainsBounds(currentBounds, newBounds);
+                    if (needFit) {
+                        map.fitBounds(newBounds);
+                        firstLoad = false;
+                    }
+                }
+            } catch (err) {
+                console.warn('Error ajustando bounds:', err);
             }
         }
         
@@ -326,117 +531,216 @@
             document.getElementById('ultimoReporte').textContent = ultimo ? formatearFecha(ultimo) : 'Sin reportes';
         }
         
-        // Actualizar fotos
+        // Actualizar fotos (miniaturas) — al clicar centramos y abrimos popup
         function actualizarFotos(reportes) {
             const container = document.getElementById('photosContainer');
-            
-            if (reportes.length === 0) {
+            container.innerHTML = '';
+
+            if (!reportes || reportes.length === 0) {
                 container.innerHTML = '<p class="text-muted">No hay reportes con fotos</p>';
                 return;
             }
-            
-            const fotosHTML = reportes
-                .filter(r => r.foto_base64)
-                .slice(0, 5) // Mostrar solo las 5 más recientes
-                .map(reporte => `
-                    <div class="photo-item">
-                        <img src="data:image/jpeg;base64,${reporte.foto_base64}" 
-                             onclick="mostrarFotoModal('${reporte.foto_base64}', ${reporte.id}, '${reporte.timestamp}')"
-                             title="Reporte #${reporte.id}">
-                        <small class="d-block mt-2">
-                            <i class="fas fa-calendar"></i> ${formatearFecha(reporte.timestamp)}
-                            <br>
-                            <i class="fas fa-map-marker-alt"></i> ${reporte.latitud.toFixed(4)}, ${reporte.longitud.toFixed(4)}
-                        </small>
-                    </div>
-                `).join('');
-                
-            container.innerHTML = fotosHTML || '<p class="text-muted">No hay fotos disponibles</p>';
-        }
-        
-        // Mostrar foto en modal
-        function mostrarFotoModal(fotoBase64, id, timestamp) {
-            document.getElementById('modalImage').src = `data:image/jpeg;base64,${fotoBase64}`;
-            document.getElementById('modalInfo').innerHTML = `
-                <strong>Reporte #${id}</strong><br>
-                <small class="text-muted">${formatearFecha(timestamp)}</small>
-            `;
-            
-            const modal = new bootstrap.Modal(document.getElementById('photoModal'));
-            modal.show();
-        }
-        
-        // Funciones auxiliares
-        function formatearFecha(timestamp) {
-            try {
-                const fecha = new Date(timestamp);
-                return fecha.toLocaleString('es-ES', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
+
+            const fotos = reportes.filter(r => r.foto_base64).slice(0, 5);
+            if (fotos.length === 0) {
+                container.innerHTML = '<p class="text-muted">No hay fotos disponibles</p>';
+                return;
+            }
+
+            fotos.forEach(reporte => {
+                const item = document.createElement('div');
+                item.className = 'photo-item';
+
+                const img = document.createElement('img');
+                img.alt = `Reporte #${reporte.id}`;
+                img.style.cursor = 'pointer';
+
+                // Crear objectURL para la miniatura (con fallback como en popup)
+                createImageSrcFromBase64(reporte.foto_base64, (src) => {
+                    if (src) img.src = src;
+                    else img.src = `data:image/jpeg;base64,${reporte.foto_base64}`;
+                    // Intentar asociar objectURL al marcador para liberar luego
+                    const marker = markersById[reporte.id];
+                    if (marker) {
+                        marker._imageObjectUrl = src || `data:image/jpeg;base64,${reporte.foto_base64}`;
+                    }
                 });
-            } catch (error) {
+
+                img.addEventListener('click', () => {
+                    // Centrar mapa y abrir popup del marcador si existe
+                    const marker = markersById[reporte.id];
+                    if (marker && map) {
+                        map.setView([reporte.latitud, reporte.longitud], Math.max(map.getZoom(), 15), { animate: true });
+                        setTimeout(() => { marker.openPopup(); }, 250);
+                    }
+                    // Mostrar modal con la foto en grande
+                    mostrarFotoModal(reporte.foto_base64, reporte.id, reporte.timestamp);
+                });
+
+                item.appendChild(img);
+                container.appendChild(item);
+            });
+        }
+
+        // Mostrar modal con foto grande
+        function mostrarFotoModal(base64, id, timestamp) {
+            const modalImage = document.getElementById('modalImage');
+            const modalInfo = document.getElementById('modalInfo');
+            // Preferimos data URI simple (compatibilidad)
+            modalImage.src = `data:image/jpeg;base64,${base64}`;
+            modalInfo.textContent = `Reporte #${id} — ${timestamp ? formatearFecha(timestamp) : ''}`;
+            const bsModal = new bootstrap.Modal(document.getElementById('photoModal'), {});
+            bsModal.show();
+        }
+
+        // Contar reportes del día actual (local)
+        function contarReportesHoy(reportes) {
+            if (!reportes || reportes.length === 0) return 0;
+            const hoy = new Date();
+            return reportes.reduce((acc, r) => {
+                if (!r.timestamp) return acc;
+                const d = new Date(r.timestamp);
+                if (d.getFullYear() === hoy.getFullYear() &&
+                    d.getMonth() === hoy.getMonth() &&
+                    d.getDate() === hoy.getDate()) {
+                    return acc + 1;
+                }
+                return acc;
+            }, 0);
+        }
+
+        // Formatear fecha de forma legible
+        function formatearFecha(timestamp) {
+            if (!timestamp) return '';
+            try {
+                const d = new Date(timestamp);
+                return d.toLocaleString('es-CO', { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+            } catch (e) {
                 return timestamp;
             }
         }
-        
-        function contarReportesHoy(reportes) {
-            const hoy = new Date();
-            hoy.setHours(0, 0, 0, 0);
-            
-            return reportes.filter(reporte => {
-                const fechaReporte = new Date(reporte.timestamp);
-                fechaReporte.setHours(0, 0, 0, 0);
-                return fechaReporte.getTime() === hoy.getTime();
-            }).length;
+
+        // Mostrar / ocultar indicador de carga simple
+        function showLoading(enabled) {
+            const btn = document.querySelector('.btn-refresh');
+            if (btn) btn.disabled = !!enabled;
+            // Opcional: añadir una clase en el body para estilos si se desea
+            if (enabled) document.body.classList.add('loading');
+            else document.body.classList.remove('loading');
         }
-        
-        function showLoading(show) {
-            const container = document.getElementById('photosContainer');
-            if (show && !container.querySelector('.loading')) {
-                container.innerHTML = `
-                    <div class="loading loading-spinner">
-                        <i class="fas fa-spinner fa-spin"></i>
-                        Cargando datos...
-                    </div>
-                `;
-            }
-        }
-        
+
+        // Mostrar mensajes de error en la interfaz (breve)
         function showError(message) {
-            const existingError = document.querySelector('.error-message');
-            if (existingError) {
-                existingError.remove();
+            const container = document.querySelector('.container-fluid');
+            let box = document.getElementById('errorBox');
+            if (!box && message) {
+                box = document.createElement('div');
+                box.id = 'errorBox';
+                box.className = 'error-message';
+                container.insertBefore(box, container.firstChild);
             }
-            
-            if (message) {
-                const errorDiv = document.createElement('div');
-                errorDiv.className = 'error-message';
-                errorDiv.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${message}`;
-                document.querySelector('.container-fluid').insertBefore(errorDiv, document.querySelector('.row'));
+            if (box) {
+                if (message) box.textContent = message;
+                else box.remove();
             }
         }
-        
-        // Inicializar la aplicación
-        document.addEventListener('DOMContentLoaded', function() {
+
+        // Inicializar y cargar al abrir
+        document.addEventListener('DOMContentLoaded', () => {
             initMap();
             cargarReportes();
-            
-            // Actualizar automáticamente cada 30 segundos
-            setInterval(cargarReportes, 30000);
         });
+
+        // Variables auxiliares para la selección en mapa
+        let seleccionarCoords = false;
+        let tempMarkerForSelection = null;
+
+        // Abrir modal de agregar
+        function abrirModalAgregar() {
+            // Limpiar campos
+            document.getElementById('inputTipo').value = 'otro';
+            document.getElementById('inputDescripcion').value = '';
+            document.getElementById('inputLat').value = '';
+            document.getElementById('inputLng').value = '';
+            document.getElementById('inputFoto').value = '';
+            const feedback = document.getElementById('addReportFeedback');
+            if (feedback) { feedback.style.display = 'none'; feedback.textContent = ''; }
+
+            const bs = new bootstrap.Modal(document.getElementById('addReportModal'), {});
+            bs.show();
+        }
+
+        // Activar modo para seleccionar coordenadas en el mapa una vez
+        function activarSeleccionMapa() {
+            seleccionarCoords = true;
+            // Indicador visual temporal: instrucción simple en console y feedback
+            alert('Haga clic en el mapa para seleccionar la ubicación del reporte.');
+        }
+
+        // Capturar clic en mapa (si está activo el modo de selección)
+        // El listener de clic en el mapa ahora se añade en initMap() para garantizar que siempre exista.
         
-        // Manejar errores de conexión
-        window.addEventListener('online', function() {
-            showError(null);
-            cargarReportes();
-        });
-        
-        window.addEventListener('offline', function() {
-            showError('Sin conexión a internet. Los datos pueden estar desactualizados.');
-        });
+        // Convierte un File a base64 (Promise)
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                if (!file) resolve(null);
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result.split(',')[1]); // retornar solo base64 sin data:...
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // Enviar nuevo reporte al backend
+        async function submitNuevoReporte() {
+            const tipo = document.getElementById('inputTipo').value || 'otro';
+            const descripcion = document.getElementById('inputDescripcion').value || '';
+            const lat = parseFloat(document.getElementById('inputLat').value);
+            const lng = parseFloat(document.getElementById('inputLng').value);
+            const file = document.getElementById('inputFoto').files[0];
+            const feedback = document.getElementById('addReportFeedback');
+
+            if (!lat || !lng || Number.isNaN(lat) || Number.isNaN(lng)) {
+                if (feedback) { feedback.style.display = 'block'; feedback.textContent = 'Seleccione las coordenadas en el mapa.'; }
+                return;
+            }
+
+            try {
+                showLoading(true);
+                const fotoBase64 = file ? await fileToBase64(file) : null;
+
+                const payload = {
+                    latitud: lat,
+                    longitud: lng,
+                    descripcion: descripcion,
+                    tipo_reporte: tipo,
+                    foto_base64: fotoBase64
+                };
+
+                const res = await fetch(`${API_BASE_URL}/reportes/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!res.ok) {
+                    const text = await res.text().catch(()=>null);
+                    throw new Error(text || `Error ${res.status}`);
+                }
+
+                // Cerrar modal y refrescar
+                const bsModalEl = document.getElementById('addReportModal');
+                const bsModal = bootstrap.Modal.getInstance(bsModalEl);
+                if (bsModal) bsModal.hide();
+
+                await cargarReportes();
+            } catch (err) {
+                console.error('Error enviando reporte:', err);
+                if (feedback) { feedback.style.display = 'block'; feedback.textContent = 'Error al enviar el reporte.'; }
+            } finally {
+                showLoading(false);
+            }
+        }
     </script>
 </body>
 </html>

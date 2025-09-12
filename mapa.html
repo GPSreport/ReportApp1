@@ -278,8 +278,9 @@
                         <button class="btn btn-sm btn-outline-primary mt-2" onclick="activarSeleccionMapa()">Seleccionar en mapa</button>
                     </div>
                     <div class="mb-2">
-                        <label class="form-label">Foto (opcional)</label>
-                        <input id="inputFoto" type="file" accept="image/*" class="form-control">
+                        <label class="form-label">Foto (opcional) - Formatos: JPG, PNG</label>
+                        <input id="inputFoto" type="file" accept="image/jpeg,image/png" class="form-control">
+                        <small class="form-text text-muted">Deje este campo vacío si no desea agregar una foto.</small>
                     </div>
                     <div id="addReportFeedback" class="text-danger small" style="display:none;"></div>
                 </div>
@@ -714,7 +715,7 @@
                     longitud: lng,
                     descripcion: descripcion,
                     tipo_reporte: tipo,
-                    foto_base64: fotoBase64
+                    foto_base64: fotoBase64 || ""  // Si no hay foto, enviar string vacío
                 };
 
                 const res = await fetch(`${API_BASE_URL}/reportes/`, {

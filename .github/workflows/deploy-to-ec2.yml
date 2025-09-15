@@ -1,0 +1,42 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches: [ 'devsec' ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Start SSH agent and add key
+        uses: webfactory/ssh-agent@v0.8.1
+        with:
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+
+      - name: Copy files to EC2 via scp
+        env:
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_PATH: ${{ secrets.EC2_PATH }}
+          EC2_PORT: ${{ secrets.EC2_PORT }}
+        run: |
+          # default port 22 if EC2_PORT not provided
+          PORT=${EC2_PORT:-22}
+          mkdir -p /tmp/deploy
+          echo "Copying main.py and mapa.html to ${EC2_USER}@${EC2_HOST}:${EC2_PATH} (port $PORT)"
+          scp -o StrictHostKeyChecking=no -P $PORT main.py mapa.html ${EC2_USER}@${EC2_HOST}:${EC2_PATH}/
+
+      - name: (Optional) Restart remote service
+        if: ${{ secrets.EC2_RESTART_SERVICE == 'true' }}
+        env:
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_PATH: ${{ secrets.EC2_PATH }}
+          EC2_PORT: ${{ secrets.EC2_PORT }}
+        run: |
+          PORT=${EC2_PORT:-22}
+          echo "Restarting service on remote host (via ssh)"
+          ssh -o StrictHostKeyChecking=no -p $PORT ${EC2_USER}@${EC2_HOST} "sudo systemctl restart reportes-gps.service || echo 'service restart failed'"

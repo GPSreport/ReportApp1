@@ -17,10 +17,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Start SSH agent and add key
-        uses: webfactory/ssh-agent@v0
-        with:
-          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+      - name: Setup SSH key
+        run: |
+          # Write private key from secret to a temporary file and secure it
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.EC2_SSH_KEY }}" > /tmp/deploy_key
+          chmod 600 /tmp/deploy_key
+          # ensure known_hosts exists to avoid prompts (we still disable checking in scp/ssh flag)
+          touch ~/.ssh/known_hosts
 
       - name: Copy files to EC2 via scp
         run: |
@@ -28,11 +32,11 @@ jobs:
           PORT=${EC2_PORT:-22}
           mkdir -p /tmp/deploy
           echo "Copying main.py and mapa.html to ${EC2_USER}@${EC2_HOST}:${EC2_PATH} (port $PORT)"
-          scp -o StrictHostKeyChecking=no -P $PORT main.py mapa.html ${EC2_USER}@${EC2_HOST}:${EC2_PATH}/
+          scp -i /tmp/deploy_key -o StrictHostKeyChecking=no -P $PORT main.py mapa.html ${EC2_USER}@${EC2_HOST}:${EC2_PATH}/
 
       - name: (Optional) Restart remote service
         if: ${{ env.EC2_RESTART_SERVICE == 'true' }}
         run: |
           PORT=${EC2_PORT:-22}
           echo "Restarting service on remote host (via ssh)"
-          ssh -o StrictHostKeyChecking=no -p $PORT ${EC2_USER}@${EC2_HOST} "sudo systemctl restart reportes-gps.service || echo 'service restart failed'"
+          ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no -p $PORT ${EC2_USER}@${EC2_HOST} "sudo systemctl restart reportes-gps.service || echo 'service restart failed'"

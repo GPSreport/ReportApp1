@@ -70,7 +70,7 @@ def get_db_connection():
         return None
 
 def init_database():
-    """Inicializa la base de datos MySQL y elimina reportes previos"""
+    """Inicializa la base de datos MySQL creando las tablas si no existen"""
     conn = get_db_connection()
     if conn is None:
         # No abortamos el arranque si la BD no está disponible; permitimos modo degradado
@@ -91,9 +91,6 @@ def init_database():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         ''')
-        conn.commit()
-        # Eliminar todos los reportes anteriores para comenzar de cero
-        cursor.execute('DELETE FROM reportes')
         conn.commit()
         cursor.close()
         conn.close()

@@ -61,12 +61,27 @@ jobs:
           MAIN_B64=$(base64 -w0 main.py)
           MAPA_B64=$(base64 -w0 mapa.html)
 
+          echo "Creating temporary parameters file for SSM"
+          cat > /tmp/ssm-params.json << EOF
+          {
+            "commands": [
+              "mkdir -p /opt/app",
+              "echo '${MAIN_B64}' | base64 -d > /opt/app/main.py",
+              "echo '${MAPA_B64}' | base64 -d > /opt/app/mapa.html",
+              "sudo chown ubuntu:ubuntu /opt/app/main.py /opt/app/mapa.html",
+              "cd /opt/app && /opt/app/venv/bin/pip3 install -r requirements.txt || true",
+              "sudo systemctl daemon-reload",
+              "sudo systemctl restart reportes-gps.service"
+            ]
+          }
+          EOF
+
           echo "Sending files to instance ${EC2_INSTANCE_ID} via SSM"
           CMD_ID=$(aws ssm send-command \
             --instance-ids "${EC2_INSTANCE_ID}" \
             --document-name "AWS-RunShellScript" \
             --comment "Deploy files from GitHub Actions" \
-            --parameters commands=["mkdir -p /opt/app && echo '${MAIN_B64}' | base64 -d > /opt/app/main.py","echo '${MAPA_B64}' | base64 -d > /opt/app/mapa.html","sudo chown ubuntu:ubuntu /opt/app/main.py /opt/app/mapa.html","/opt/app/venv/bin/pip3 install -r /opt/app/requirements.txt || true","sudo systemctl daemon-reload","sudo systemctl restart reportes-gps.service"] \
+            --parameters file:///tmp/ssm-params.json \
             --query 'Command.CommandId' --output text --region ${AWS_REGION})
           echo "SSM CommandId: $CMD_ID"
 

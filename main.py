@@ -69,6 +69,19 @@ class LoginResponse(BaseModel):
     success: bool
     message: str
     usuario: Optional[str] = None
+    numero_usuario: Optional[int] = None
+
+class UsuarioCreate(BaseModel):
+    usuario: str
+    clave: str
+    nombres: str
+    telefono: str
+
+class UsuarioResponse(BaseModel):
+    success: bool
+    message: str
+    usuario: Optional[str] = None
+    numero_usuario: Optional[int] = None
 
 def get_db_connection():
     """Obtiene una conexión a la base de datos MySQL"""
@@ -230,7 +243,7 @@ async def login(request: LoginRequest):
         
         # Buscar usuario en la base de datos
         cursor.execute('''
-        SELECT id, usuario, activo 
+    SELECT id, usuario, activo, numero_usuario 
         FROM usuarios 
         WHERE usuario = %s AND clave_hash = %s AND activo = TRUE
         ''', (request.usuario.strip(), clave_hash))
@@ -252,7 +265,8 @@ async def login(request: LoginRequest):
             return LoginResponse(
                 success=True,
                 message=f"Bienvenido {usuario_db['usuario']}",
-                usuario=usuario_db['usuario']
+                usuario=usuario_db['usuario'],
+                numero_usuario=usuario_db.get('numero_usuario') if isinstance(usuario_db, dict) else None
             )
         else:
             # Verificar si el usuario existe pero la contraseña es incorrecta
@@ -275,6 +289,52 @@ async def login(request: LoginRequest):
     except Exception as e:
         # Error inesperado del servidor
         print(f"Error en login: {e}")
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
+
+@app.post("/usuarios/crear", response_model=UsuarioResponse)
+async def crear_usuario(request: UsuarioCreate):
+    """Crear un nuevo usuario con numero_usuario asignado automáticamente"""
+    try:
+        # Validaciones básicas
+        if not request.usuario or not request.clave or not request.nombres or not request.telefono:
+            raise HTTPException(status_code=400, detail="Todos los campos son requeridos")
+        if len(request.usuario.strip()) < 3:
+            raise HTTPException(status_code=400, detail="El usuario debe tener al menos 3 caracteres")
+        if len(request.clave) < 3:
+            raise HTTPException(status_code=400, detail="La contraseña debe tener al menos 3 caracteres")
+        if len(request.telefono.strip()) < 6:
+            raise HTTPException(status_code=400, detail="El teléfono no es válido")
+
+        conn = get_db_connection()
+        if conn is None:
+            raise HTTPException(status_code=500, detail="Error de conexión a la base de datos")
+        cursor = conn.cursor(dictionary=True)
+
+        # Verificar que no exista el usuario
+        cursor.execute('SELECT id FROM usuarios WHERE usuario = %s', (request.usuario.strip(),))
+        if cursor.fetchone():
+            cursor.close(); conn.close()
+            raise HTTPException(status_code=409, detail="El usuario ya existe")
+
+        # Calcular siguiente numero_usuario
+        cursor.execute('SELECT COALESCE(MAX(numero_usuario), 0) + 1 AS next_num FROM usuarios')
+        next_num = int(cursor.fetchone()['next_num'])
+
+        # Insertar
+        clave_hash = hash_password(request.clave)
+        cursor.execute('''
+        INSERT INTO usuarios (usuario, clave_hash, nombres, telefono, numero_usuario, activo)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        ''', (request.usuario.strip(), clave_hash, request.nombres.strip(), request.telefono.strip(), next_num, True))
+
+        conn.commit()
+        cursor.close(); conn.close()
+
+        return UsuarioResponse(success=True, message="Usuario creado correctamente", usuario=request.usuario.strip(), numero_usuario=next_num)
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error creando usuario: {e}")
         raise HTTPException(status_code=500, detail="Error interno del servidor")
 
 @app.get("/mapa", response_class=HTMLResponse)

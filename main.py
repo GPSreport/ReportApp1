@@ -237,14 +237,14 @@ async def login(request: LoginRequest):
             raise HTTPException(status_code=500, detail="Error de conexión a la base de datos")
         
         cursor = conn.cursor(dictionary=True)
-        
+
         # Generar hash de la contraseña proporcionada
         clave_hash = hash_password(request.clave)
-        
+
         # Buscar usuario en la base de datos
         cursor.execute('''
-    SELECT id, usuario, activo, numero_usuario 
-        FROM usuarios 
+        SELECT id, usuario, activo
+        FROM usuarios
         WHERE usuario = %s AND clave_hash = %s AND activo = TRUE
         ''', (request.usuario.strip(), clave_hash))
         
@@ -262,11 +262,15 @@ async def login(request: LoginRequest):
             cursor.close()
             conn.close()
             
+            numero_usuario = None
+            if isinstance(usuario_db, dict):
+                numero_usuario = usuario_db.get('id')
+
             return LoginResponse(
                 success=True,
                 message=f"Bienvenido {usuario_db['usuario']}",
                 usuario=usuario_db['usuario'],
-                numero_usuario=usuario_db.get('numero_usuario') if isinstance(usuario_db, dict) else None
+                numero_usuario=numero_usuario
             )
         else:
             # Verificar si el usuario existe pero la contraseña es incorrecta
@@ -293,7 +297,7 @@ async def login(request: LoginRequest):
 
 @app.post("/usuarios/crear", response_model=UsuarioResponse)
 async def crear_usuario(request: UsuarioCreate):
-    """Crear un nuevo usuario con numero_usuario asignado automáticamente"""
+    """Crear un nuevo usuario y devolver el identificador asignado automáticamente"""
     try:
         # Validaciones básicas
         if not request.usuario or not request.clave or not request.nombres or not request.telefono:
@@ -316,21 +320,18 @@ async def crear_usuario(request: UsuarioCreate):
             cursor.close(); conn.close()
             raise HTTPException(status_code=409, detail="El usuario ya existe")
 
-        # Calcular siguiente numero_usuario
-        cursor.execute('SELECT COALESCE(MAX(numero_usuario), 0) + 1 AS next_num FROM usuarios')
-        next_num = int(cursor.fetchone()['next_num'])
-
         # Insertar
         clave_hash = hash_password(request.clave)
         cursor.execute('''
-        INSERT INTO usuarios (usuario, clave_hash, nombres, telefono, numero_usuario, activo)
-        VALUES (%s, %s, %s, %s, %s, %s)
-        ''', (request.usuario.strip(), clave_hash, request.nombres.strip(), request.telefono.strip(), next_num, True))
+        INSERT INTO usuarios (usuario, clave_hash, nombres, telefono, activo)
+        VALUES (%s, %s, %s, %s, %s)
+        ''', (request.usuario.strip(), clave_hash, request.nombres.strip(), request.telefono.strip(), True))
 
         conn.commit()
+        nuevo_id = cursor.lastrowid
         cursor.close(); conn.close()
 
-        return UsuarioResponse(success=True, message="Usuario creado correctamente", usuario=request.usuario.strip(), numero_usuario=next_num)
+        return UsuarioResponse(success=True, message="Usuario creado correctamente", usuario=request.usuario.strip(), numero_usuario=nuevo_id)
     except HTTPException:
         raise
     except Exception as e:

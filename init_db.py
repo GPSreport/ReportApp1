@@ -68,7 +68,6 @@ def create_database():
                 clave_hash VARCHAR(64) NOT NULL,
                 nombres VARCHAR(100) NULL,
                 telefono VARCHAR(20) NULL,
-                numero_usuario INT UNIQUE,
                 activo BOOLEAN DEFAULT TRUE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 last_login TIMESTAMP NULL
@@ -91,25 +90,6 @@ def create_database():
 
         ensure_column('nombres', 'nombres VARCHAR(100) NULL')
         ensure_column('telefono', 'telefono VARCHAR(20) NULL')
-        ensure_column('numero_usuario', 'numero_usuario INT UNIQUE')
-
-        # Asignar numero_usuario a registros existentes si está NULL
-        cursor.execute("SELECT id FROM usuarios WHERE numero_usuario IS NULL ORDER BY id")
-        rows_missing = cursor.fetchall()
-        if rows_missing:
-            print("🔢 Asignando numero_usuario a usuarios existentes...")
-            # Obtener máximo actual
-            cursor.execute("SELECT COALESCE(MAX(numero_usuario), 0) FROM usuarios")
-            max_num = cursor.fetchone()[0] or 0
-            next_num = max_num + 1
-            for (uid,) in rows_missing:
-                cursor.execute("UPDATE usuarios SET numero_usuario = %s WHERE id = %s", (next_num, uid))
-                next_num += 1
-        
-        # Helper para obtener siguiente numero_usuario
-        def get_next_user_number(cur) -> int:
-            cur.execute("SELECT COALESCE(MAX(numero_usuario), 0) + 1 FROM usuarios")
-            return int(cur.fetchone()[0])
 
         # Verificar si ya existe un usuario admin por defecto
         cursor.execute("SELECT COUNT(*) as count FROM usuarios WHERE usuario = 'admin'")
@@ -118,12 +98,11 @@ def create_database():
         if result[0] == 0:
             # Crear usuario admin por defecto con contraseña "admin123"
             admin_password_hash = hash_password("admin123")
-            admin_num = get_next_user_number(cursor)
             cursor.execute('''
-            INSERT INTO usuarios (usuario, clave_hash, activo, nombres, telefono, numero_usuario)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            ''', ('admin', admin_password_hash, True, 'Administrador', '0000000000', admin_num))
-            print(f"✅ Usuario 'admin' creado (contraseña: admin123, numero_usuario: {admin_num})")
+            INSERT INTO usuarios (usuario, clave_hash, activo, nombres, telefono)
+            VALUES (%s, %s, %s, %s, %s)
+            ''', ('admin', admin_password_hash, True, 'Administrador', '0000000000'))
+            print("✅ Usuario 'admin' creado (contraseña: admin123)")
         else:
             print("ℹ️ Usuario 'admin' ya existe")
         
@@ -134,12 +113,11 @@ def create_database():
         if result[0] == 0:
             # Crear usuario "usuario" por defecto con contraseña "123456"
             user_password_hash = hash_password("123456")
-            usr_num = get_next_user_number(cursor)
             cursor.execute('''
-            INSERT INTO usuarios (usuario, clave_hash, activo, nombres, telefono, numero_usuario)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            ''', ('usuario', user_password_hash, True, 'Usuario de prueba', '1111111111', usr_num))
-            print(f"✅ Usuario 'usuario' creado (contraseña: 123456, numero_usuario: {usr_num})")
+            INSERT INTO usuarios (usuario, clave_hash, activo, nombres, telefono)
+            VALUES (%s, %s, %s, %s, %s)
+            ''', ('usuario', user_password_hash, True, 'Usuario de prueba', '1111111111'))
+            print("✅ Usuario 'usuario' creado (contraseña: 123456)")
         else:
             print("ℹ️ Usuario 'usuario' ya existe")
         

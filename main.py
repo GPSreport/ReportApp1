@@ -122,6 +122,21 @@ class UserStatusResponse(BaseModel):
     activo: Optional[int] = None
     success: bool = True
 
+# --- Modelos para recuperación de usuario ---
+class RecoverUserSendCodeRequest(BaseModel):
+    email: EmailStr
+
+class RecoverUserVerifyRequest(BaseModel):
+    email: EmailStr
+    codigo: str
+    nueva_clave: str
+
+class RecoverUserResponse(BaseModel):
+    success: bool
+    message: str
+    usuario: Optional[str] = None
+    email: Optional[EmailStr] = None
+
 def get_db_connection():
     """Obtiene una conexión a la base de datos MySQL"""
     try:
@@ -397,14 +412,12 @@ def init_database():
     """Inicializa la base de datos MySQL creando las tablas si no existen"""
     conn = get_db_connection()
     if conn is None:
-        # No abortamos el arranque si la BD no está disponible; permitimos modo degradado
         print("Advertencia: No se pudo conectar a la base de datos en init_database(). La app arrancará sin acceso a DB.")
         return False
-
+    cursor = None
     try:
         cursor = conn.cursor()
-        
-        # Crear tabla de reportes
+
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS reportes (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -417,8 +430,7 @@ def init_database():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         ''')
-        
-        # Crear tabla de usuarios para login
+
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS usuarios (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -433,8 +445,7 @@ def init_database():
             UNIQUE KEY idx_correo_unique (correo)
         )
         ''')
-        
-        # Crear tabla de tokens de verificación
+
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS verification_tokens (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -451,47 +462,103 @@ def init_database():
             INDEX idx_expires (expires_at)
         )
         ''')
-        
-        # Verificar si ya existe un usuario admin por defecto
+
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS recovery_codes (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            usuario_id INT NOT NULL,
+            codigo VARCHAR(6) NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            expires_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP + INTERVAL 15 MINUTE),
+            used BOOLEAN DEFAULT FALSE,
+            FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+            INDEX idx_rec_codigo (codigo),
+            INDEX idx_rec_expires (expires_at)
+        )
+        ''')
+
         cursor.execute("SELECT COUNT(*) as count FROM usuarios WHERE usuario = 'admin'")
         result = cursor.fetchone()
-        
-        if result[0] == 0:
-            # Crear usuario admin por defecto con contraseña "admin123"
+        if result and result[0] == 0:
             admin_password_hash = hash_password("admin123")
             cursor.execute('''
             INSERT INTO usuarios (usuario, clave_hash, nombres, telefono, correo, activo)
             VALUES (%s, %s, %s, %s, %s, %s)
             ''', ('admin', admin_password_hash, 'Administrador', '0000000000', 'admin@sistema.com', 3))
             print("✅ Usuario admin creado (usuario: admin, contraseña: admin123)")
-        
-        # Verificar si existe usuario "usuario" por defecto
+
         cursor.execute("SELECT COUNT(*) as count FROM usuarios WHERE usuario = 'usuario'")
         result = cursor.fetchone()
-        
-        if result[0] == 0:
-            # Crear usuario "usuario" por defecto con contraseña "123456"
+        if result and result[0] == 0:
             user_password_hash = hash_password("123456")
             cursor.execute('''
             INSERT INTO usuarios (usuario, clave_hash, nombres, telefono, correo, activo)
             VALUES (%s, %s, %s, %s, %s, %s)
             ''', ('usuario', user_password_hash, 'Usuario de prueba', '1111111111', 'usuario@test.com', 3))
             print("✅ Usuario 'usuario' creado (usuario: usuario, contraseña: 123456)")
-        
+
         conn.commit()
-        cursor.close()
-        conn.close()
         return True
     except Exception as e:
         print(f"Error inicializando la base de datos: {e}")
+        return False
+    finally:
         try:
-            cursor.close()
+            if cursor:
+                cursor.close()
         except Exception:
             pass
         try:
-            conn.close()
+            if conn:
+                conn.close()
         except Exception:
             pass
+
+def send_recovery_code_email(email: str, codigo: str) -> bool:
+    """Envía email con código para recuperar nombre de usuario"""
+    try:
+        if os.getenv('SKIP_EMAIL_VERIFICATION', '').lower() in ('1','true','yes'):
+            print(f"[DEV] SKIP_EMAIL_VERIFICATION activo. Simula envío código recuperación {codigo} -> {email}")
+            return True
+        ses_client = boto3.client(
+            'ses',
+            region_name=AWS_CONFIG['region'],
+            aws_access_key_id=AWS_CONFIG['access_key'],
+            aws_secret_access_key=AWS_CONFIG['secret_key']
+        )
+        subject = f"🔎 Recuperación de Usuario - Código: {codigo}"
+        html_body = f"""
+        <html><body style='font-family: Arial, sans-serif;'>
+        <h2 style='color:#2563eb;'>Recuperación de Usuario</h2>
+        <p>Has solicitado recuperar tu nombre de usuario en <strong>GPS Reporter</strong>.</p>
+        <p>Tu código de recuperación es:</p>
+        <div style='background:#f0f9ff;border-left:4px solid #2563eb;padding:16px;text-align:center;border-radius:6px;'>
+            <span style='font-size:34px;letter-spacing:6px;font-family:Courier New,monospace;color:#2563eb;'>{codigo}</span>
+        </div>
+        <p style='font-size:13px;color:#555;'>Ingresa este código en la pantalla de recuperación para revelar tu usuario.</p>
+        <p style='font-size:12px;color:#aa0000;'>El código expira en 15 minutos. Si no lo solicitaste, ignora este correo.</p>
+        <hr><p style='font-size:11px;color:#999;'>GPS Reporter System</p>
+        </body></html>
+        """
+        text_body = f"Recuperación de Usuario\n\nCódigo: {codigo}\nVálido 15 minutos."
+        response = ses_client.send_email(
+            Source=AWS_CONFIG['sender_email'],
+            Destination={'ToAddresses':[email]},
+            Message={
+                'Subject': {'Data': subject,'Charset':'UTF-8'},
+                'Body': {
+                    'Text': {'Data': text_body,'Charset':'UTF-8'},
+                    'Html': {'Data': html_body,'Charset':'UTF-8'}
+                }
+            }
+        )
+        print(f"✅ Código recuperación enviado a {email}. Message ID: {response['MessageId']}")
+        return True
+    except ClientError as e:
+        print(f"❌ SES error recuperación: {e.response['Error']['Code']} - {e.response['Error']['Message']}")
+        return False
+    except Exception as e:
+        print(f"❌ Error inesperado envío recuperación: {e}")
         return False
 IMAGES_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "imagenes_reportes")
 os.makedirs(IMAGES_FOLDER, exist_ok=True)
@@ -958,6 +1025,77 @@ async def enviar_codigo_verificacion(request: SendCodeRequest):
         if connection and connection.is_connected():
             cursor.close()
             connection.close()
+
+# ------------------ Recuperación de Usuario ------------------
+@app.post("/recuperar-usuario/enviar-codigo", response_model=RecoverUserResponse)
+async def recuperar_usuario_enviar_codigo(request: RecoverUserSendCodeRequest):
+    if not is_valid_email(request.email):
+        raise HTTPException(status_code=400, detail="Formato de email inválido")
+    conn = get_db_connection()
+    if conn is None:
+        raise HTTPException(status_code=500, detail="Error de conexión a la base de datos")
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT id FROM usuarios WHERE correo=%s", (request.email,))
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Email no registrado")
+        usuario_id = row[0]
+        # Limpiar códigos anteriores no usados
+        cursor.execute("DELETE FROM recovery_codes WHERE usuario_id=%s AND used=FALSE", (usuario_id,))
+        codigo = generate_verification_code()
+        cursor.execute("""
+            INSERT INTO recovery_codes (usuario_id, codigo, expires_at)
+            VALUES (%s, %s, DATE_ADD(NOW(), INTERVAL 15 MINUTE))
+        """, (usuario_id, codigo))
+        conn.commit()
+        ok = send_recovery_code_email(request.email, codigo)
+        if not ok:
+            raise HTTPException(status_code=500, detail="No se pudo enviar el correo (SES)")
+        return RecoverUserResponse(success=True, message="Código enviado a tu correo", email=request.email)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error interno: {e}")
+    finally:
+        cursor.close(); conn.close()
+
+@app.post("/recuperar-usuario/verificar", response_model=RecoverUserResponse)
+async def recuperar_usuario_verificar(request: RecoverUserVerifyRequest):
+    if not is_valid_email(request.email):
+        raise HTTPException(status_code=400, detail="Formato de email inválido")
+    if not (len(request.codigo) == 6 and request.codigo.isdigit()):
+        raise HTTPException(status_code=400, detail="Código inválido")
+    if not request.nueva_clave or len(request.nueva_clave) < 6:
+        raise HTTPException(status_code=400, detail="La nueva contraseña debe tener al menos 6 caracteres")
+    conn = get_db_connection()
+    if conn is None:
+        raise HTTPException(status_code=500, detail="Error de conexión a la base de datos")
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            SELECT rc.id, u.usuario, rc.used, u.id
+            FROM recovery_codes rc
+            JOIN usuarios u ON rc.usuario_id = u.id
+            WHERE u.correo=%s AND rc.codigo=%s AND rc.expires_at > NOW() AND rc.used = FALSE
+        """, (request.email, request.codigo))
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=400, detail="Código inválido o expirado")
+        rec_id, usuario, used, usuario_id = row
+        # Marcar código como usado
+        cursor.execute("UPDATE recovery_codes SET used=TRUE WHERE id=%s", (rec_id,))
+        # Actualizar contraseña del usuario usando la columna correcta clave_hash
+        hashed = hash_password(request.nueva_clave)
+        cursor.execute("UPDATE usuarios SET clave_hash=%s WHERE id=%s", (hashed, usuario_id))
+        conn.commit()
+        return RecoverUserResponse(success=True, message="Contraseña actualizada y usuario recuperado", usuario=usuario, email=request.email)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error interno: {e}")
+    finally:
+        cursor.close(); conn.close()
 
 # Endpoint para verificar código de 6 dígitos
 @app.post("/verificar-codigo")

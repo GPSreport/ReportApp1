@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 import mysql.connector
 from mysql.connector import Error
@@ -14,6 +14,13 @@ import base64
 from PIL import Image
 from io import BytesIO
 import hashlib
+import re
+import boto3
+from botocore.exceptions import ClientError
+import uuid
+import random
+import string
+from urllib.parse import urlencode
 
 # Cargar variables de entorno
 load_dotenv()
@@ -25,6 +32,14 @@ DB_CONFIG = {
     'database': os.getenv('DB_NAME'),
     'user': os.getenv('DB_USER'),
     'password': os.getenv('DB_PASSWORD')
+}
+
+# Configuración de AWS SES
+AWS_CONFIG = {
+    'region': os.getenv('AWS_REGION', 'us-east-1'),
+    'access_key': os.getenv('AWS_ACCESS_KEY_ID'),
+    'secret_key': os.getenv('AWS_SECRET_ACCESS_KEY'),
+    'sender_email': os.getenv('AWS_SES_SENDER_EMAIL', 'noreply@tudominio.com')
 }
 
 # Crear la aplicación FastAPI
@@ -70,18 +85,42 @@ class LoginResponse(BaseModel):
     message: str
     usuario: Optional[str] = None
     numero_usuario: Optional[int] = None
+    email: Optional[str] = None
+    verificado: Optional[bool] = None
 
 class UsuarioCreate(BaseModel):
     usuario: str
     clave: str
     nombres: str
     telefono: str
+    correo: str
 
 class UsuarioResponse(BaseModel):
     success: bool
     message: str
     usuario: Optional[str] = None
     numero_usuario: Optional[int] = None
+
+class VerificationRequest(BaseModel):
+    token: str
+
+class VerificationResponse(BaseModel):
+    success: bool
+    message: str
+
+class SendCodeRequest(BaseModel):
+    email: EmailStr
+
+class VerifyCodeRequest(BaseModel):
+    codigo: str
+
+class UserStatusResponse(BaseModel):
+    nombre: str
+    email: EmailStr
+    verificado: bool
+    estado_texto: str
+    activo: Optional[int] = None
+    success: bool = True
 
 def get_db_connection():
     """Obtiene una conexión a la base de datos MySQL"""
@@ -95,6 +134,264 @@ def get_db_connection():
 def hash_password(password: str) -> str:
     """Genera hash SHA-256 de la contraseña"""
     return hashlib.sha256(password.encode()).hexdigest()
+
+def verify_password(plain: str, stored_hash: str) -> bool:
+    """Verifica contraseña. Actualmente sólo SHA-256, deja hook para bcrypt futuro."""
+    try:
+        # Si longitud típica de sha256
+        if len(stored_hash) == 64:
+            return hash_password(plain) == stored_hash
+        # Futuro: if stored_hash.startswith('$2b$'): usar bcrypt
+        return False
+    except Exception:
+        return False
+
+def is_valid_email(email: str) -> bool:
+    """Valida el formato de un correo electrónico"""
+    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return re.match(email_pattern, email) is not None
+
+# --- Variables globales de depuración ---
+LAST_SENT_CODE: dict[str, dict] = {}
+
+@app.get("/debug/ses")
+async def debug_ses():
+    """Verifica conectividad y límites de AWS SES."""
+    try:
+        if os.getenv('SKIP_EMAIL_VERIFICATION', '').lower() in ('1','true','yes'):
+            return {"skip_mode": True, "message": "SKIP_EMAIL_VERIFICATION activo, no se prueba SES"}
+        ses_client = boto3.client(
+            'ses',
+            region_name=AWS_CONFIG['region'],
+            aws_access_key_id=AWS_CONFIG['access_key'],
+            aws_secret_access_key=AWS_CONFIG['secret_key']
+        )
+        quota = ses_client.get_send_quota()
+        idents = ses_client.list_identities(MaxItems=20)
+        return {
+            "skip_mode": False,
+            "quota": quota,
+            "identities_sample": idents.get('Identities', [])[:5],
+            "region": AWS_CONFIG['region']
+        }
+    except ClientError as e:
+        return {"error": e.response['Error'], "region": AWS_CONFIG['region']}
+    except Exception as e:
+        return {"error": str(e), "region": AWS_CONFIG['region']}
+
+@app.get("/debug/ultimo-codigo/{email}")
+async def debug_ultimo_codigo(email: str):
+    data = LAST_SENT_CODE.get(email.lower())
+    if not data:
+        return {"found": False}
+    return {"found": True, **data}
+
+def generate_verification_token() -> str:
+    """Genera un token único para verificación"""
+    return str(uuid.uuid4())
+
+def generate_verification_code() -> str:
+    """Genera un código de verificación de 6 dígitos"""
+    return ''.join(random.choices(string.digits, k=6))
+
+def send_verification_email(email: str, token: str, base_url: str = "http://localhost:5000") -> bool:
+    """Envía email de verificación usando AWS SES"""
+    try:
+        # Crear cliente de SES
+        ses_client = boto3.client(
+            'ses',
+            region_name=AWS_CONFIG['region'],
+            aws_access_key_id=AWS_CONFIG['access_key'],
+            aws_secret_access_key=AWS_CONFIG['secret_key']
+        )
+        
+        # URL de verificación
+        verification_url = f"{base_url}/verificar-email?token={token}"
+        
+        # Contenido del email
+        subject = "Verificación de Correo Electrónico - GPS Reporter"
+        
+        html_body = f"""
+        <html>
+        <head></head>
+        <body>
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #2563eb;">¡Bienvenido a GPS Reporter! 📍</h2>
+                
+                <p>Gracias por registrarte en nuestra aplicación de reportes GPS.</p>
+                
+                <p>Para completar tu registro y activar tu cuenta, por favor haz clic en el siguiente enlace:</p>
+                
+                <div style="text-align: center; margin: 30px 0;">
+                    <a href="{verification_url}" 
+                       style="background-color: #2563eb; color: white; padding: 12px 24px; 
+                              text-decoration: none; border-radius: 6px; display: inline-block;">
+                        ✅ Verificar mi correo electrónico
+                    </a>
+                </div>
+                
+                <p style="color: #666; font-size: 14px;">
+                    Si no puedes hacer clic en el botón, copia y pega este enlace en tu navegador:
+                    <br><a href="{verification_url}">{verification_url}</a>
+                </p>
+                
+                <p style="color: #666; font-size: 12px; margin-top: 30px;">
+                    Este enlace expira en 24 horas. Si no verificas tu cuenta en ese tiempo, 
+                    deberás registrarte nuevamente.
+                </p>
+                
+                <hr style="border: none; height: 1px; background-color: #eee; margin: 30px 0;">
+                <p style="color: #999; font-size: 12px; text-align: center;">
+                    GPS Reporter System - No responder a este correo
+                </p>
+            </div>
+        </body>
+        </html>
+        """
+        
+        text_body = f"""
+        ¡Bienvenido a GPS Reporter!
+        
+        Gracias por registrarte en nuestra aplicación de reportes GPS.
+        
+        Para completar tu registro y activar tu cuenta, visita el siguiente enlace:
+        {verification_url}
+        
+        Este enlace expira en 24 horas.
+        
+        GPS Reporter System
+        """
+        
+        # Enviar email
+        response = ses_client.send_email(
+            Source=AWS_CONFIG['sender_email'],
+            Destination={'ToAddresses': [email]},
+            Message={
+                'Subject': {'Data': subject, 'Charset': 'UTF-8'},
+                'Body': {
+                    'Text': {'Data': text_body, 'Charset': 'UTF-8'},
+                    'Html': {'Data': html_body, 'Charset': 'UTF-8'}
+                }
+            }
+        )
+        
+        print(f"✅ Email de verificación enviado a {email}. Message ID: {response['MessageId']}")
+        return True
+        
+    except ClientError as e:
+        error_code = e.response['Error']['Code']
+        error_message = e.response['Error']['Message']
+        print(f"❌ Error enviando email: {error_code} - {error_message}")
+        
+        if error_code == 'MessageRejected':
+            print("💡 Verifica que el email remitente esté verificado en AWS SES")
+        elif error_code == 'InvalidParameterValue':
+            print("💡 Verifica la configuración de AWS SES")
+            
+        return False
+    except Exception as e:
+        print(f"❌ Error inesperado enviando email: {e}")
+        return False
+
+def send_verification_code_email(email: str, codigo: str, usuario: str) -> bool:
+    """Envía código de verificación de 6 dígitos por email"""
+    try:
+        # Permitir modo de desarrollo sin enviar correo real
+        if os.getenv('SKIP_EMAIL_VERIFICATION', '').lower() in ('1', 'true', 'yes'):
+            print(f"[DEV] SKIP_EMAIL_VERIFICATION activo. Se simula envío de código {codigo} a {email} (usuario={usuario}).")
+            return True
+
+        # Crear cliente de SES
+        ses_client = boto3.client(
+            'ses',
+            region_name=AWS_CONFIG['region'],
+            aws_access_key_id=AWS_CONFIG['access_key'],
+            aws_secret_access_key=AWS_CONFIG['secret_key']
+        )
+        
+        # Contenido del email
+        subject = f"🔐 Código de Verificación - GPS Reporter: {codigo}"
+        
+        html_body = f"""
+        <html>
+        <head></head>
+        <body>
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                <h2 style="color: #2563eb; text-align: center;">🔐 Verificación de Cuenta</h2>
+                
+                <p>Hola <strong>{usuario}</strong>,</p>
+                
+                <p>Has solicitado verificar tu cuenta en GPS Reporter. Tu código de verificación es:</p>
+                
+                <div style="text-align: center; margin: 30px 0; padding: 20px; background: #f0f9ff; border-radius: 8px; border-left: 4px solid #2563eb;">
+                    <h1 style="color: #2563eb; font-size: 36px; margin: 0; letter-spacing: 8px; font-family: 'Courier New', monospace;">
+                        {codigo}
+                    </h1>
+                </div>
+                
+                <p style="color: #666; font-size: 14px;">
+                    <strong>Instrucciones:</strong>
+                    <br>1. Abre la aplicación GPS Reporter
+                    <br>2. Ve a tu perfil
+                    <br>3. Ingresa el código de 6 dígitos
+                    <br>4. Tu cuenta será verificada automáticamente
+                </p>
+                
+                <p style="color: #dc2626; font-size: 12px; margin-top: 30px;">
+                    ⚠️ Este código expira en 15 minutos. No lo compartas con nadie.
+                </p>
+                
+                <hr style="border: none; height: 1px; background-color: #eee; margin: 30px 0;">
+                <p style="color: #999; font-size: 12px; text-align: center;">
+                    GPS Reporter System - Código generado automáticamente
+                </p>
+            </div>
+        </body>
+        </html>
+        """
+        
+        text_body = f"""
+        🔐 Verificación de Cuenta - GPS Reporter
+        
+        Hola {usuario},
+        
+        Tu código de verificación es: {codigo}
+        
+        Instrucciones:
+        1. Abre la aplicación GPS Reporter
+        2. Ve a tu perfil  
+        3. Ingresa el código de 6 dígitos
+        4. Tu cuenta será verificada
+        
+        ⚠️ Este código expira en 15 minutos.
+        
+        GPS Reporter System
+        """
+        
+        # Enviar email
+        response = ses_client.send_email(
+            Source=AWS_CONFIG['sender_email'],
+            Destination={'ToAddresses': [email]},
+            Message={
+                'Subject': {'Data': subject, 'Charset': 'UTF-8'},
+                'Body': {
+                    'Text': {'Data': text_body, 'Charset': 'UTF-8'},
+                    'Html': {'Data': html_body, 'Charset': 'UTF-8'}
+                }
+            }
+        )
+        
+        print(f"✅ Código de verificación enviado a {email}. Message ID: {response['MessageId']}")
+        return True
+        
+    except ClientError as e:
+        error_code = e.response['Error']['Code']
+        error_message = e.response['Error']['Message']
+        print(f"❌ Error enviando código: {error_code} - {error_message}")
+        return False
+    except Exception as e:
+        print(f"❌ Error inesperado enviando código: {e}")
+        return False
 
 def init_database():
     """Inicializa la base de datos MySQL creando las tablas si no existen"""
@@ -127,9 +424,31 @@ def init_database():
             id INT AUTO_INCREMENT PRIMARY KEY,
             usuario VARCHAR(50) UNIQUE NOT NULL,
             clave_hash VARCHAR(64) NOT NULL,
-            activo BOOLEAN DEFAULT TRUE,
+            nombres VARCHAR(100) NULL,
+            telefono VARCHAR(20) NULL,
+            correo VARCHAR(255) NULL,
+            activo TINYINT DEFAULT 1 COMMENT '1=registrado, 3=verificado',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            last_login TIMESTAMP NULL
+            last_login TIMESTAMP NULL,
+            UNIQUE KEY idx_correo_unique (correo)
+        )
+        ''')
+        
+        # Crear tabla de tokens de verificación
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS verification_tokens (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            usuario_id INT NOT NULL,
+            token VARCHAR(255) UNIQUE NOT NULL,
+            codigo VARCHAR(6) NULL COMMENT 'Código de 6 dígitos para verificación desde app',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            expires_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP + INTERVAL 24 HOUR),
+            code_expires_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP + INTERVAL 15 MINUTE),
+            used BOOLEAN DEFAULT FALSE,
+            FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+            INDEX idx_token (token),
+            INDEX idx_codigo (codigo),
+            INDEX idx_expires (expires_at)
         )
         ''')
         
@@ -141,9 +460,9 @@ def init_database():
             # Crear usuario admin por defecto con contraseña "admin123"
             admin_password_hash = hash_password("admin123")
             cursor.execute('''
-            INSERT INTO usuarios (usuario, clave_hash, activo)
-            VALUES (%s, %s, %s)
-            ''', ('admin', admin_password_hash, True))
+            INSERT INTO usuarios (usuario, clave_hash, nombres, telefono, correo, activo)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ''', ('admin', admin_password_hash, 'Administrador', '0000000000', 'admin@sistema.com', 3))
             print("✅ Usuario admin creado (usuario: admin, contraseña: admin123)")
         
         # Verificar si existe usuario "usuario" por defecto
@@ -154,9 +473,9 @@ def init_database():
             # Crear usuario "usuario" por defecto con contraseña "123456"
             user_password_hash = hash_password("123456")
             cursor.execute('''
-            INSERT INTO usuarios (usuario, clave_hash, activo)
-            VALUES (%s, %s, %s)
-            ''', ('usuario', user_password_hash, True))
+            INSERT INTO usuarios (usuario, clave_hash, nombres, telefono, correo, activo)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ''', ('usuario', user_password_hash, 'Usuario de prueba', '1111111111', 'usuario@test.com', 3))
             print("✅ Usuario 'usuario' creado (usuario: usuario, contraseña: 123456)")
         
         conn.commit()
@@ -217,6 +536,37 @@ async def root():
     </html>
     """
 
+@app.get("/debug/health")
+async def debug_health():
+    conn = get_db_connection()
+    if conn is None:
+        return {"database": False, "status": "DOWN"}
+    try:
+        cursor = conn.cursor(); cursor.execute("SELECT 1"); cursor.fetchone()
+        cursor.close(); conn.close()
+        return {"database": True, "status": "UP"}
+    except Exception as e:
+        return {"database": False, "error": str(e), "status": "DEGRADED"}
+
+@app.get("/debug/user/{usuario}")
+async def debug_user(usuario: str):
+    conn = get_db_connection()
+    if conn is None:
+        raise HTTPException(status_code=500, detail="Sin conexión a BD")
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT id, usuario, correo, activo, created_at, last_login FROM usuarios WHERE usuario=%s", (usuario,))
+        data = cursor.fetchone()
+        cursor.close(); conn.close()
+        if not data:
+            raise HTTPException(status_code=404, detail="No encontrado")
+        data['verificado'] = (data['activo'] == 3)
+        return data
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/login", response_model=LoginResponse)
 async def login(request: LoginRequest):
     """Endpoint de autenticación de usuarios"""
@@ -238,54 +588,46 @@ async def login(request: LoginRequest):
         
         cursor = conn.cursor(dictionary=True)
 
-        # Generar hash de la contraseña proporcionada
-        clave_hash = hash_password(request.clave)
-
-        # Buscar usuario en la base de datos
+        # Buscar usuario por nombre
         cursor.execute('''
-        SELECT id, usuario, activo
+        SELECT id, usuario, activo, correo, clave_hash
         FROM usuarios
-        WHERE usuario = %s AND clave_hash = %s AND activo = TRUE
-        ''', (request.usuario.strip(), clave_hash))
-        
+        WHERE usuario = %s
+        ''', (request.usuario.strip(),))
         usuario_db = cursor.fetchone()
-        
-        if usuario_db:
-            # Actualizar último login
+
+        if not usuario_db:
+            cursor.close(); conn.close()
+            raise HTTPException(status_code=401, detail="Usuario no encontrado")
+
+        # Verificar contraseña
+        if not verify_password(request.clave, usuario_db['clave_hash']):
+            cursor.close(); conn.close()
+            raise HTTPException(status_code=401, detail="Contraseña incorrecta")
+
+        # Determinar verificación
+        verificado = (usuario_db['activo'] == 3)
+
+        # Si verificado actualiza last_login
+        if verificado:
             cursor.execute('''
-            UPDATE usuarios 
-            SET last_login = CURRENT_TIMESTAMP 
-            WHERE id = %s
+            UPDATE usuarios SET last_login = CURRENT_TIMESTAMP WHERE id = %s
             ''', (usuario_db['id'],))
             conn.commit()
-            
-            cursor.close()
-            conn.close()
-            
-            numero_usuario = None
-            if isinstance(usuario_db, dict):
-                numero_usuario = usuario_db.get('id')
 
-            return LoginResponse(
-                success=True,
-                message=f"Bienvenido {usuario_db['usuario']}",
-                usuario=usuario_db['usuario'],
-                numero_usuario=numero_usuario
-            )
-        else:
-            # Verificar si el usuario existe pero la contraseña es incorrecta
-            cursor.execute('SELECT usuario FROM usuarios WHERE usuario = %s AND activo = TRUE', (request.usuario.strip(),))
-            existe_usuario = cursor.fetchone()
-            
-            cursor.close()
-            conn.close()
-            
-            if existe_usuario:
-                # Usuario existe pero contraseña incorrecta
-                raise HTTPException(status_code=401, detail="Contraseña incorrecta")
-            else:
-                # Usuario no existe
-                raise HTTPException(status_code=401, detail="Usuario no encontrado")
+        numero_usuario = usuario_db['id']
+        email_val = usuario_db['correo']
+
+        cursor.close(); conn.close()
+
+        return LoginResponse(
+            success=True,
+            message=(f"Bienvenido {usuario_db['usuario']}" if verificado else "Cuenta no verificada"),
+            usuario=usuario_db['usuario'],
+            numero_usuario=numero_usuario,
+            email=email_val,
+            verificado=verificado
+        )
     
     except HTTPException:
         # Re-lanzar HTTPExceptions (errores de validación/autenticación)
@@ -300,7 +642,7 @@ async def crear_usuario(request: UsuarioCreate):
     """Crear un nuevo usuario y devolver el identificador asignado automáticamente"""
     try:
         # Validaciones básicas
-        if not request.usuario or not request.clave or not request.nombres or not request.telefono:
+        if not request.usuario or not request.clave or not request.nombres or not request.telefono or not request.correo:
             raise HTTPException(status_code=400, detail="Todos los campos son requeridos")
         if len(request.usuario.strip()) < 3:
             raise HTTPException(status_code=400, detail="El usuario debe tener al menos 3 caracteres")
@@ -308,6 +650,8 @@ async def crear_usuario(request: UsuarioCreate):
             raise HTTPException(status_code=400, detail="La contraseña debe tener al menos 3 caracteres")
         if len(request.telefono.strip()) < 6:
             raise HTTPException(status_code=400, detail="El teléfono no es válido")
+        if not is_valid_email(request.correo.strip()):
+            raise HTTPException(status_code=400, detail="El formato del correo electrónico no es válido")
 
         conn = get_db_connection()
         if conn is None:
@@ -319,24 +663,396 @@ async def crear_usuario(request: UsuarioCreate):
         if cursor.fetchone():
             cursor.close(); conn.close()
             raise HTTPException(status_code=409, detail="El usuario ya existe")
+        
+        # Verificar que no exista el correo electrónico
+        cursor.execute('SELECT id FROM usuarios WHERE correo = %s', (request.correo.strip(),))
+        if cursor.fetchone():
+            cursor.close(); conn.close()
+            raise HTTPException(status_code=409, detail="El correo electrónico ya está registrado")
 
-        # Insertar
+        # Insertar usuario como no verificado (activo = 1)
         clave_hash = hash_password(request.clave)
         cursor.execute('''
-        INSERT INTO usuarios (usuario, clave_hash, nombres, telefono, activo)
-        VALUES (%s, %s, %s, %s, %s)
-        ''', (request.usuario.strip(), clave_hash, request.nombres.strip(), request.telefono.strip(), True))
+        INSERT INTO usuarios (usuario, clave_hash, nombres, telefono, correo, activo)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        ''', (request.usuario.strip(), clave_hash, request.nombres.strip(), request.telefono.strip(), request.correo.strip(), 1))
 
         conn.commit()
         nuevo_id = cursor.lastrowid
+        
+        # Generar token de verificación
+        verification_token = generate_verification_token()
+        cursor.execute('''
+        INSERT INTO verification_tokens (usuario_id, token)
+        VALUES (%s, %s)
+        ''', (nuevo_id, verification_token))
+        
+        conn.commit()
         cursor.close(); conn.close()
-
-        return UsuarioResponse(success=True, message="Usuario creado correctamente", usuario=request.usuario.strip(), numero_usuario=nuevo_id)
+        
+        # Enviar email de verificación
+        email_sent = send_verification_email(request.correo.strip(), verification_token)
+        
+        if email_sent:
+            return UsuarioResponse(
+                success=True, 
+                message="Usuario creado. Revisa tu correo electrónico para verificar tu cuenta.", 
+                usuario=request.usuario.strip(), 
+                numero_usuario=nuevo_id
+            )
+        else:
+            return UsuarioResponse(
+                success=True, 
+                message="Usuario creado, pero hubo un error enviando el email de verificación. Contacta al administrador.", 
+                usuario=request.usuario.strip(), 
+                numero_usuario=nuevo_id
+            )
     except HTTPException:
         raise
     except Exception as e:
         print(f"Error creando usuario: {e}")
         raise HTTPException(status_code=500, detail="Error interno del servidor")
+
+@app.get("/verificar-email", response_class=HTMLResponse)
+async def verificar_email_get(token: str):
+    """Endpoint GET para verificar correo electrónico desde enlace"""
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            return "<h1>Error: No se pudo conectar a la base de datos</h1>"
+        
+        cursor = conn.cursor(dictionary=True)
+        
+        # Buscar token válido
+        cursor.execute('''
+        SELECT vt.id, vt.usuario_id, vt.used, vt.expires_at, u.usuario, u.correo
+        FROM verification_tokens vt
+        JOIN usuarios u ON vt.usuario_id = u.id
+        WHERE vt.token = %s AND vt.used = FALSE AND vt.expires_at > NOW()
+        ''', (token,))
+        
+        token_data = cursor.fetchone()
+        
+        if not token_data:
+            cursor.close(); conn.close()
+            return """
+            <html>
+            <head><title>Verificación Fallida</title></head>
+            <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+                <h1 style="color: #dc2626;">❌ Token de verificación inválido o expirado</h1>
+                <p>El enlace de verificación no es válido o ha expirado.</p>
+                <p>Por favor, regístrate nuevamente o contacta al administrador.</p>
+            </body>
+            </html>
+            """
+        
+        # Marcar usuario como verificado
+        cursor.execute('UPDATE usuarios SET activo = 3 WHERE id = %s', (token_data['usuario_id'],))
+        
+        # Marcar token como usado
+        cursor.execute('UPDATE verification_tokens SET used = TRUE WHERE id = %s', (token_data['id'],))
+        
+        conn.commit()
+        cursor.close(); conn.close()
+        
+        return f"""
+        <html>
+        <head><title>¡Verificación Exitosa!</title></head>
+        <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+            <h1 style="color: #16a34a;">✅ ¡Cuenta verificada exitosamente!</h1>
+            <p>Hola <strong>{token_data['usuario']}</strong>,</p>
+            <p>Tu correo <strong>{token_data['correo']}</strong> ha sido verificado correctamente.</p>
+            <p>Ya puedes iniciar sesión en la aplicación GPS Reporter.</p>
+            
+            <div style="margin-top: 30px; padding: 20px; background: #f0f9ff; border-radius: 8px;">
+                <h3>🔐 Próximos pasos:</h3>
+                <p>1. Abre la aplicación GPS Reporter</p>
+                <p>2. Inicia sesión con tu usuario y contraseña</p>
+                <p>3. ¡Comienza a crear reportes!</p>
+            </div>
+        </body>
+        </html>
+        """
+        
+    except Exception as e:
+        return f"<h1>Error: {str(e)}</h1>"
+
+@app.post("/verificar-email", response_model=VerificationResponse)
+async def verificar_email_post(request: VerificationRequest):
+    """Endpoint POST para verificar correo electrónico"""
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            raise HTTPException(status_code=500, detail="Error de conexión a la base de datos")
+        
+        cursor = conn.cursor(dictionary=True)
+        
+        # Buscar token válido
+        cursor.execute('''
+        SELECT vt.id, vt.usuario_id, vt.used, vt.expires_at, u.usuario
+        FROM verification_tokens vt
+        JOIN usuarios u ON vt.usuario_id = u.id
+        WHERE vt.token = %s AND vt.used = FALSE AND vt.expires_at > NOW()
+        ''', (request.token,))
+        
+        token_data = cursor.fetchone()
+        
+        if not token_data:
+            cursor.close(); conn.close()
+            raise HTTPException(status_code=400, detail="Token de verificación inválido o expirado")
+        
+        # Marcar usuario como verificado
+        cursor.execute('UPDATE usuarios SET activo = 3 WHERE id = %s', (token_data['usuario_id'],))
+        
+        # Marcar token como usado
+        cursor.execute('UPDATE verification_tokens SET used = TRUE WHERE id = %s', (token_data['id'],))
+        
+        conn.commit()
+        cursor.close(); conn.close()
+        
+        return VerificationResponse(
+            success=True, 
+            message=f"Cuenta verificada exitosamente. ¡Bienvenido {token_data['usuario']}!"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error interno del servidor: {str(e)}")
+
+@app.post("/reenviar-verificacion")
+async def reenviar_verificacion(request: LoginRequest):
+    """Reenviar correo de verificación para usuarios no verificados"""
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            raise HTTPException(status_code=500, detail="Error de conexión a la base de datos")
+        
+        cursor = conn.cursor(dictionary=True)
+        
+        # Buscar usuario no verificado
+        cursor.execute('''
+        SELECT id, usuario, correo, activo
+        FROM usuarios
+        WHERE usuario = %s AND activo = 1
+        ''', (request.usuario.strip(),))
+        
+        usuario_db = cursor.fetchone()
+        
+        if not usuario_db:
+            cursor.close(); conn.close()
+            raise HTTPException(status_code=404, detail="Usuario no encontrado o ya verificado")
+        
+        # Verificar contraseña
+        clave_hash = hash_password(request.clave)
+        cursor.execute('''
+        SELECT id FROM usuarios
+        WHERE id = %s AND clave_hash = %s
+        ''', (usuario_db['id'], clave_hash))
+        
+        if not cursor.fetchone():
+            cursor.close(); conn.close()
+            raise HTTPException(status_code=401, detail="Contraseña incorrecta")
+        
+        # Invalidar tokens anteriores
+        cursor.execute('''
+        UPDATE verification_tokens 
+        SET used = TRUE 
+        WHERE usuario_id = %s AND used = FALSE
+        ''', (usuario_db['id'],))
+        
+        # Generar nuevo token
+        verification_token = generate_verification_token()
+        cursor.execute('''
+        INSERT INTO verification_tokens (usuario_id, token)
+        VALUES (%s, %s)
+        ''', (usuario_db['id'], verification_token))
+        
+        conn.commit()
+        cursor.close(); conn.close()
+        
+        # Enviar email
+        email_sent = send_verification_email(usuario_db['correo'], verification_token)
+        
+        if email_sent:
+            return {"success": True, "message": "Correo de verificación reenviado. Revisa tu bandeja de entrada."}
+        else:
+            return {"success": False, "message": "Error enviando el correo. Intenta más tarde."}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error interno del servidor: {str(e)}")
+
+# Endpoint para enviar código de verificación de 6 dígitos
+@app.post("/enviar-codigo")
+async def enviar_codigo_verificacion(request: SendCodeRequest):
+    connection = None
+    cursor = None
+    
+    try:
+        # Conectar a la base de datos
+        connection = get_db_connection()
+        if connection is None:
+            raise HTTPException(status_code=500, detail="Error de conexión a la base de datos")
+        
+        if not is_valid_email(request.email):
+            raise HTTPException(status_code=400, detail="Formato de email inválido")
+
+        cursor = connection.cursor()
+        
+        # Verificar que el usuario existe y no está verificado (obtenemos también el nombre de usuario para personalizar el correo)
+        cursor.execute("SELECT id, activo, usuario FROM usuarios WHERE correo = %s", (request.email,))
+        user = cursor.fetchone()
+        
+        if not user:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        
+        user_id, activo, usuario_nombre = user
+        
+        if activo == 3:
+            raise HTTPException(status_code=400, detail="El usuario ya está verificado")
+        
+        # Generar código de 6 dígitos
+        codigo = generate_verification_code()
+        
+        # Limpiar códigos anteriores no usados para este usuario
+        cursor.execute("DELETE FROM verification_tokens WHERE usuario_id = %s AND codigo IS NOT NULL", (user_id,))
+        
+        # Crear nuevo token con código
+        token = str(uuid.uuid4())
+        cursor.execute("""
+            INSERT INTO verification_tokens (usuario_id, token, codigo, expires_at, code_expires_at)
+            VALUES (%s, %s, %s, DATE_ADD(NOW(), INTERVAL 24 HOUR), DATE_ADD(NOW(), INTERVAL 15 MINUTE))
+        """, (user_id, token, codigo))
+        
+        connection.commit()
+
+        # Guardar en memoria para depuración
+        LAST_SENT_CODE[request.email.lower()] = {
+            "codigo": codigo,
+            "generado_at": datetime.utcnow().isoformat() + 'Z',
+            "usuario_id": user_id,
+            "usuario": usuario_nombre
+        }
+        
+        # Enviar email con código (incluyendo el nombre de usuario para el saludo)
+        email_ok = send_verification_code_email(request.email, codigo, usuario_nombre)
+        if not email_ok:
+            # Si falla el envío devolvemos 500 para que el cliente no muestre falso positivo
+            raise HTTPException(status_code=500, detail="Fallo al enviar correo (ver logs SES / configura SKIP_EMAIL_VERIFICATION=1 para pruebas)")
+        
+        return {
+            "success": True,
+            "message": "Código de verificación enviado correctamente",
+            "expires_in_minutes": 15,
+            "email": request.email,
+            "usuario": usuario_nombre
+        }
+        
+    except mysql.connector.Error as err:
+        raise HTTPException(status_code=500, detail=f"Error de base de datos: {err}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error interno del servidor: {str(e)}")
+    finally:
+        if connection and connection.is_connected():
+            cursor.close()
+            connection.close()
+
+# Endpoint para verificar código de 6 dígitos
+@app.post("/verificar-codigo")
+async def verificar_codigo(request: VerifyCodeRequest):
+    connection = None
+    cursor = None
+    
+    try:
+        # Conectar a la base de datos
+        connection = get_db_connection()
+        if connection is None:
+            raise HTTPException(status_code=500, detail="Error de conexión a la base de datos")
+        
+        cursor = connection.cursor()
+        
+        # Buscar el código
+        cursor.execute("""
+            SELECT vt.id, vt.usuario_id, vt.used, u.correo
+            FROM verification_tokens vt
+            JOIN usuarios u ON vt.usuario_id = u.id
+            WHERE vt.codigo = %s AND vt.code_expires_at > NOW() AND vt.used = FALSE
+        """, (request.codigo,))
+        
+        token_data = cursor.fetchone()
+        
+        if not token_data:
+            raise HTTPException(status_code=400, detail="Código inválido o expirado")
+        
+        token_id, user_id, used, email = token_data
+        
+        # Marcar el token como usado
+        cursor.execute("UPDATE verification_tokens SET used = TRUE WHERE id = %s", (token_id,))
+        
+        # Activar el usuario
+        cursor.execute("UPDATE usuarios SET activo = 3 WHERE id = %s", (user_id,))
+        
+        connection.commit()
+        
+        return {
+            "success": True,
+            "message": "Usuario verificado correctamente",
+            "email": email,
+            "activo": 3,
+            "verificado": True
+        }
+        
+    except mysql.connector.Error as err:
+        raise HTTPException(status_code=500, detail=f"Error de base de datos: {err}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error interno del servidor: {str(e)}")
+    finally:
+        if connection and connection.is_connected():
+            cursor.close()
+            connection.close()
+
+# Endpoint para obtener estado del usuario
+@app.get("/usuario-estado/{email}")
+async def obtener_estado_usuario(email: str):
+    connection = None
+    cursor = None
+    
+    try:
+        # Conectar a la base de datos
+        connection = get_db_connection()
+        if connection is None:
+            raise HTTPException(status_code=500, detail="Error de conexión a la base de datos")
+        
+        cursor = connection.cursor()
+        
+        # Obtener información del usuario
+        cursor.execute("SELECT nombres, activo FROM usuarios WHERE correo = %s", (email,))
+        user = cursor.fetchone()
+        
+        if not user:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        
+        nombre, activo = user
+        
+        return UserStatusResponse(
+            nombre=nombre,
+            email=email,
+            verificado=(activo == 3),
+            estado_texto="Usuario Verificado" if activo == 3 else "Usuario No Verificado",
+            activo=activo,
+            success=True
+        )
+        
+    except mysql.connector.Error as err:
+        raise HTTPException(status_code=500, detail=f"Error de base de datos: {err}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error interno del servidor: {str(e)}")
+    finally:
+        if connection and connection.is_connected():
+            cursor.close()
+            connection.close()
 
 @app.get("/mapa", response_class=HTMLResponse)
 async def mapa():
@@ -517,7 +1233,7 @@ async def info_usuarios():
             
         cursor = conn.cursor(dictionary=True)
         cursor.execute('''
-        SELECT usuario, activo, created_at, last_login 
+        SELECT usuario, correo, activo, created_at, last_login 
         FROM usuarios 
         WHERE activo = TRUE
         ORDER BY created_at DESC
@@ -527,6 +1243,7 @@ async def info_usuarios():
         for row in cursor:
             usuarios.append({
                 "usuario": row["usuario"],
+                "correo": row["correo"],
                 "activo": row["activo"],
                 "created_at": row["created_at"].isoformat() if row["created_at"] else None,
                 "last_login": row["last_login"].isoformat() if row["last_login"] else None

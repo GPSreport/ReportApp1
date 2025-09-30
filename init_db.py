@@ -68,9 +68,27 @@ def create_database():
                 clave_hash VARCHAR(64) NOT NULL,
                 nombres VARCHAR(100) NULL,
                 telefono VARCHAR(20) NULL,
-                activo BOOLEAN DEFAULT TRUE,
+                correo VARCHAR(255) NULL,
+                activo TINYINT DEFAULT 1 COMMENT '1=registrado, 3=verificado',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_login TIMESTAMP NULL
+                last_login TIMESTAMP NULL,
+                UNIQUE KEY idx_correo_unique (correo)
+            )
+        """)
+        
+        # Crear tabla de tokens de verificación
+        print("🔐 Creando tabla 'verification_tokens'...")
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS verification_tokens (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                usuario_id INT NOT NULL,
+                token VARCHAR(255) UNIQUE NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                expires_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP + INTERVAL 24 HOUR),
+                used BOOLEAN DEFAULT FALSE,
+                FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+                INDEX idx_token (token),
+                INDEX idx_expires (expires_at)
             )
         """)
 
@@ -90,6 +108,26 @@ def create_database():
 
         ensure_column('nombres', 'nombres VARCHAR(100) NULL')
         ensure_column('telefono', 'telefono VARCHAR(20) NULL')
+        ensure_column('correo', 'correo VARCHAR(255) NULL')
+        
+        # Asegurar índice único para correo
+        def ensure_unique_index(index_name: str, column: str):
+            cursor.execute("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                WHERE TABLE_SCHEMA = %s AND TABLE_NAME = 'usuarios' AND INDEX_NAME = %s
+            """, (DB_CONFIG['database'], index_name))
+            exists = cursor.fetchone()[0] > 0
+            if not exists:
+                print(f"🔧 Creando índice único '{index_name}' para columna '{column}'...")
+                try:
+                    cursor.execute(f"ALTER TABLE usuarios ADD UNIQUE INDEX {index_name} ({column})")
+                except mysql.connector.Error as e:
+                    if "Duplicate entry" in str(e):
+                        print(f"⚠️ Hay valores duplicados en '{column}'. Índice único no creado.")
+                    else:
+                        print(f"❌ Error creando índice: {e}")
+        
+        ensure_unique_index('idx_correo_unique', 'correo')
 
         # Verificar si ya existe un usuario admin por defecto
         cursor.execute("SELECT COUNT(*) as count FROM usuarios WHERE usuario = 'admin'")
@@ -99,9 +137,9 @@ def create_database():
             # Crear usuario admin por defecto con contraseña "admin123"
             admin_password_hash = hash_password("admin123")
             cursor.execute('''
-            INSERT INTO usuarios (usuario, clave_hash, activo, nombres, telefono)
-            VALUES (%s, %s, %s, %s, %s)
-            ''', ('admin', admin_password_hash, True, 'Administrador', '0000000000'))
+            INSERT INTO usuarios (usuario, clave_hash, activo, nombres, telefono, correo)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ''', ('admin', admin_password_hash, True, 'Administrador', '0000000000', 'admin@sistema.com'))
             print("✅ Usuario 'admin' creado (contraseña: admin123)")
         else:
             print("ℹ️ Usuario 'admin' ya existe")
@@ -114,9 +152,9 @@ def create_database():
             # Crear usuario "usuario" por defecto con contraseña "123456"
             user_password_hash = hash_password("123456")
             cursor.execute('''
-            INSERT INTO usuarios (usuario, clave_hash, activo, nombres, telefono)
-            VALUES (%s, %s, %s, %s, %s)
-            ''', ('usuario', user_password_hash, True, 'Usuario de prueba', '1111111111'))
+            INSERT INTO usuarios (usuario, clave_hash, activo, nombres, telefono, correo)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ''', ('usuario', user_password_hash, True, 'Usuario de prueba', '1111111111', 'usuario@test.com'))
             print("✅ Usuario 'usuario' creado (contraseña: 123456)")
         else:
             print("ℹ️ Usuario 'usuario' ya existe")

@@ -66,6 +66,7 @@ class ReporteCreate(BaseModel):
     foto_base64: Optional[str] = None
     descripcion: Optional[str] = None
     tipo_reporte: Optional[str] = "general"
+    aforo: Optional[int] = None  # Número de personas detectadas
 
 class ReporteResponse(BaseModel):
     id: int
@@ -75,6 +76,7 @@ class ReporteResponse(BaseModel):
     foto_base64: str
     descripcion: Optional[str]
     tipo_reporte: str
+    aforo: Optional[int] = None  # Número de personas detectadas
 
 class LoginRequest(BaseModel):
     usuario: str
@@ -427,6 +429,7 @@ def init_database():
             foto_base64 LONGTEXT NOT NULL,
             descripcion TEXT,
             tipo_reporte VARCHAR(50) DEFAULT 'general',
+            aforo INT DEFAULT NULL COMMENT 'Número de personas detectadas',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         ''')
@@ -1244,15 +1247,16 @@ async def crear_reporte(reporte: ReporteCreate):
 
         # Guardar en la base de datos (la ruta en la columna foto_base64)
         cursor.execute('''
-        INSERT INTO reportes (latitud, longitud, timestamp, foto_base64, descripcion, tipo_reporte)
-        VALUES (%s, %s, %s, %s, %s, %s)
+        INSERT INTO reportes (latitud, longitud, timestamp, foto_base64, descripcion, tipo_reporte, aforo)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
         ''', (
             lat,
             lng,
             current_time,
             ruta_imagen,
             reporte.descripcion or None,
-            reporte.tipo_reporte or 'general'
+            reporte.tipo_reporte or 'general',
+            reporte.aforo
         ))
         reporte_id = cursor.lastrowid
         conn.commit()
@@ -1266,7 +1270,8 @@ async def crear_reporte(reporte: ReporteCreate):
             timestamp=current_time.isoformat(),
             foto_base64=ruta_imagen,
             descripcion=reporte.descripcion,
-            tipo_reporte=reporte.tipo_reporte or 'general'
+            tipo_reporte=reporte.tipo_reporte or 'general',
+            aforo=reporte.aforo
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
@@ -1282,7 +1287,7 @@ async def obtener_reportes():
         cursor = conn.cursor(dictionary=True)
         
         cursor.execute('''
-        SELECT id, latitud, longitud, timestamp, foto_base64, descripcion, tipo_reporte
+        SELECT id, latitud, longitud, timestamp, foto_base64, descripcion, tipo_reporte, aforo
         FROM reportes
         ORDER BY created_at DESC
         ''')
@@ -1309,7 +1314,8 @@ async def obtener_reportes():
                 timestamp=timestamp,
                 foto_base64=row["foto_base64"] or "",  # Evitar None en foto_base64
                 descripcion=row["descripcion"] or "",  # Convertir None a string vacío
-                tipo_reporte=row["tipo_reporte"] or "general"  # Usar valor por defecto si es None
+                tipo_reporte=row["tipo_reporte"] or "general",  # Usar valor por defecto si es None
+                aforo=row.get("aforo")  # Puede ser None
             ))
         
         cursor.close()

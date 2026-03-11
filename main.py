@@ -8,6 +8,7 @@ import mysql.connector
 from mysql.connector import Error
 import json
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import os
 from dotenv import load_dotenv
 import base64
@@ -66,7 +67,8 @@ class ReporteCreate(BaseModel):
     foto_base64: Optional[str] = None
     descripcion: Optional[str] = None
     tipo_reporte: Optional[str] = "general"
-    aforo: Optional[int] = None  # Número de personas detectadas
+    fecha_inicio_evento: Optional[str] = None  # Para eventos culturales/deportivos
+    fecha_fin_evento: Optional[str] = None     # Para eventos culturales/deportivos
 
 class ReporteResponse(BaseModel):
     id: int
@@ -76,7 +78,8 @@ class ReporteResponse(BaseModel):
     foto_base64: str
     descripcion: Optional[str]
     tipo_reporte: str
-    aforo: Optional[int] = None  # Número de personas detectadas
+    fecha_inicio_evento: Optional[str] = None
+    fecha_fin_evento: Optional[str] = None
 
 class LoginRequest(BaseModel):
     usuario: str
@@ -138,6 +141,23 @@ class RecoverUserResponse(BaseModel):
     message: str
     usuario: Optional[str] = None
     email: Optional[EmailStr] = None
+
+# --- Modelos para Aforo de Lugares de Interés ---
+class AforoLugarCreate(BaseModel):
+    """Modelo para recibir datos de aforo desde servidor de procesamiento de imágenes"""
+    foto_base64: str
+    timestamp: str
+    aforo: int
+    latitud: Optional[float] = None
+    longitud: Optional[float] = None
+    lugar_id: Optional[str] = None  # Identificador del lugar de interés
+
+class AforoLugarResponse(BaseModel):
+    success: bool
+    message: str
+    id: Optional[int] = None
+    aforo: Optional[int] = None
+    timestamp: Optional[str] = None
 
 def get_db_connection():
     """Obtiene una conexión a la base de datos MySQL"""
@@ -429,7 +449,8 @@ def init_database():
             foto_base64 LONGTEXT NOT NULL,
             descripcion TEXT,
             tipo_reporte VARCHAR(50) DEFAULT 'general',
-            aforo INT DEFAULT NULL COMMENT 'Número de personas detectadas',
+            fecha_inicio_evento DATETIME NULL COMMENT 'Fecha y hora de inicio del evento',
+            fecha_fin_evento DATETIME NULL COMMENT 'Fecha y hora de fin del evento',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         ''')
@@ -477,6 +498,22 @@ def init_database():
             FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
             INDEX idx_rec_codigo (codigo),
             INDEX idx_rec_expires (expires_at)
+        )
+        ''')
+
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS aforo_lugares (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            foto_ruta VARCHAR(500) NOT NULL COMMENT 'Ruta de la imagen procesada',
+            timestamp_captura DATETIME NOT NULL COMMENT 'Timestamp de la captura original',
+            aforo INT NOT NULL COMMENT 'Número de personas detectadas',
+            latitud DECIMAL(10, 8) NULL,
+            longitud DECIMAL(11, 8) NULL,
+            lugar_id VARCHAR(100) NULL COMMENT 'Identificador del lugar de interés',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_timestamp (timestamp_captura),
+            INDEX idx_lugar (lugar_id),
+            INDEX idx_aforo (aforo)
         )
         ''')
 
@@ -597,11 +634,6 @@ async def root():
                 <li><a href="/mapa">🗺️ Ver Mapa de Reportes</a></li>
                 <li><a href="/reportes">📊 Ver Reportes (JSON)</a></li>
             </ul>
-            <div style="margin-top: 30px; padding: 20px; background: #f0f8ff; border-radius: 8px;">
-                <h3>🔐 Credenciales de prueba:</h3>
-                <p><strong>Usuario:</strong> admin | <strong>Contraseña:</strong> admin123</p>
-                <p><strong>Usuario:</strong> usuario | <strong>Contraseña:</strong> 123456</p>
-            </div>
         </body>
     </html>
     """
@@ -1208,15 +1240,25 @@ async def mapa():
 async def crear_reporte(reporte: ReporteCreate):
     """Crear un nuevo reporte, guardar imagen en disco y ruta en la base de datos"""
     try:
-        # Si no hay timestamp, usar actual
-        current_time = datetime.now()
+        print(f"\n🔵 Recibiendo nuevo reporte...")
+        print(f"   timestamp recibido: {reporte.timestamp}")
+        
+        # Si no hay timestamp, usar actual en zona horaria de Bogotá
         if not reporte.timestamp:
-            reporte.timestamp = current_time.isoformat()
+            current_time = datetime.now(ZoneInfo("America/Bogota")).replace(tzinfo=None)
+            print(f"   ✅ timestamp generado (hora actual Bogotá): {current_time}")
         else:
             try:
-                current_time = datetime.fromisoformat(reporte.timestamp)
-            except ValueError:
-                current_time = datetime.now()
+                # La app envía timestamp en hora local (Bogotá) sin timezone
+                # Formato: YYYY-MM-DDTHH:mm:ss
+                timestamp_str = reporte.timestamp.replace('Z', '').strip()
+                current_time = datetime.fromisoformat(timestamp_str)
+                print(f"   ✅ timestamp parseado (hora Bogotá): {current_time}")
+            except (ValueError, AttributeError) as e:
+                # Si falla el parseo, usar hora actual de Bogotá
+                print(f"   ⚠️ Error parseando timestamp '{reporte.timestamp}': {e}")
+                current_time = datetime.now(ZoneInfo("America/Bogota")).replace(tzinfo=None)
+                print(f"   ✅ usando hora actual Bogotá: {current_time}")
 
         conn = get_db_connection()
         if conn is None:
@@ -1234,21 +1276,79 @@ async def crear_reporte(reporte: ReporteCreate):
             try:
                 image_data = base64.b64decode(reporte.foto_base64)
                 image = Image.open(BytesIO(image_data))
+                
+                # Convertir a RGB si tiene transparencia (RGBA, LA, P con transparencia)
+                if image.mode in ('RGBA', 'LA', 'P'):
+                    print(f"  🎨 Imagen con transparencia detectada (modo {image.mode}), convirtiendo a RGB...")
+                    # Crear fondo blanco
+                    rgb_image = Image.new('RGB', image.size, (255, 255, 255))
+                    # Si tiene canal alfa, hacer composición
+                    if image.mode == 'RGBA':
+                        rgb_image.paste(image, mask=image.split()[3])  # Usar canal alfa como máscara
+                    elif image.mode == 'LA':
+                        rgb_image.paste(image, mask=image.split()[1])  # Usar canal alfa como máscara
+                    else:  # Modo P (palette)
+                        rgb_image.paste(image.convert('RGBA'))
+                    image = rgb_image
+                    print(f"  ✅ Imagen convertida a RGB")
+                
                 image_filename = f"{next_id}.jpg"
                 image_path = os.path.join(IMAGES_FOLDER, image_filename)
-                image.save(image_path, format="JPEG")
+                image.save(image_path, format="JPEG", quality=85)
                 ruta_imagen = f"imagenes_reportes/{image_filename}"
+                print(f"  💾 Imagen guardada: {image_filename}")
             except Exception as img_err:
+                print(f"  ❌ Error procesando imagen: {img_err}")
                 raise HTTPException(status_code=400, detail=f"Error al procesar la imagen: {img_err}")
 
         # Asegurar que latitud y longitud sean float con precisión correcta
         lat = round(float(reporte.latitud), 8)
         lng = round(float(reporte.longitud), 8)
 
+        # Procesar fechas de evento si es un evento cultural o deportivo
+        fecha_inicio = None
+        fecha_fin = None
+        
+        # Debug: Imprimir tipo de reporte recibido
+        print(f"📋 Tipo de reporte recibido: '{reporte.tipo_reporte}'")
+        print(f"   fecha_inicio_evento: {reporte.fecha_inicio_evento}")
+        print(f"   fecha_fin_evento: {reporte.fecha_fin_evento}")
+        
+        if reporte.tipo_reporte in ['Eventos Culturales', 'Eventos Deportivos']:
+            print(f"✓ Es un evento cultural/deportivo, procesando fechas...")
+            
+            if reporte.fecha_inicio_evento:
+                try:
+                    # La app envía fechas en hora local (Bogotá) sin timezone
+                    # Formato: YYYY-MM-DDTHH:mm:ss
+                    fecha_inicio_str = reporte.fecha_inicio_evento.replace('Z', '').strip()
+                    fecha_inicio = datetime.fromisoformat(fecha_inicio_str)
+                    print(f"  ✅ fecha_inicio procesada (hora Bogotá): {fecha_inicio}")
+                except Exception as e:
+                    print(f"  ❌ Error procesando fecha_inicio_evento '{reporte.fecha_inicio_evento}': {e}")
+                    fecha_inicio = None
+            else:
+                print(f"  ⚠️  fecha_inicio_evento es None/vacía")
+            
+            if reporte.fecha_fin_evento:
+                try:
+                    # La app envía fechas en hora local (Bogotá) sin timezone
+                    # Formato: YYYY-MM-DDTHH:mm:ss
+                    fecha_fin_str = reporte.fecha_fin_evento.replace('Z', '').strip()
+                    fecha_fin = datetime.fromisoformat(fecha_fin_str)
+                    print(f"  ✅ fecha_fin procesada (hora Bogotá): {fecha_fin}")
+                except Exception as e:
+                    print(f"  ❌ Error procesando fecha_fin_evento '{reporte.fecha_fin_evento}': {e}")
+                    fecha_fin = None
+            else:
+                print(f"  ⚠️  fecha_fin_evento es None/vacía")
+        else:
+            print(f"✗ No es un evento, tipo_reporte no coincide con 'Eventos Culturales' o 'Eventos Deportivos'")
+
         # Guardar en la base de datos (la ruta en la columna foto_base64)
         cursor.execute('''
-        INSERT INTO reportes (latitud, longitud, timestamp, foto_base64, descripcion, tipo_reporte, aforo)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO reportes (latitud, longitud, timestamp, foto_base64, descripcion, tipo_reporte, fecha_inicio_evento, fecha_fin_evento)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         ''', (
             lat,
             lng,
@@ -1256,12 +1356,18 @@ async def crear_reporte(reporte: ReporteCreate):
             ruta_imagen,
             reporte.descripcion or None,
             reporte.tipo_reporte or 'general',
-            reporte.aforo
+            fecha_inicio,
+            fecha_fin
         ))
         reporte_id = cursor.lastrowid
         conn.commit()
         cursor.close()
         conn.close()
+
+        print(f"✅ Reporte {reporte_id} guardado exitosamente")
+        print(f"   Timestamp en BD: {current_time}")
+        print(f"   Fecha inicio: {fecha_inicio}")
+        print(f"   Fecha fin: {fecha_fin}\n")
 
         return ReporteResponse(
             id=reporte_id,
@@ -1271,9 +1377,17 @@ async def crear_reporte(reporte: ReporteCreate):
             foto_base64=ruta_imagen,
             descripcion=reporte.descripcion,
             tipo_reporte=reporte.tipo_reporte or 'general',
-            aforo=reporte.aforo
+            fecha_inicio_evento=fecha_inicio.isoformat() if fecha_inicio else None,
+            fecha_fin_evento=fecha_fin.isoformat() if fecha_fin else None
         )
+    except HTTPException:
+        raise
     except Exception as e:
+        print(f"\n❌ ERROR CRÍTICO en crear_reporte:")
+        print(f"   Tipo de error: {type(e).__name__}")
+        print(f"   Mensaje: {str(e)}")
+        import traceback
+        print(f"   Traceback:\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @app.get("/reportes/", response_model=List[ReporteResponse])
@@ -1287,7 +1401,8 @@ async def obtener_reportes():
         cursor = conn.cursor(dictionary=True)
         
         cursor.execute('''
-        SELECT id, latitud, longitud, timestamp, foto_base64, descripcion, tipo_reporte, aforo
+        SELECT id, latitud, longitud, timestamp, foto_base64, descripcion, tipo_reporte, 
+               fecha_inicio_evento, fecha_fin_evento
         FROM reportes
         ORDER BY created_at DESC
         ''')
@@ -1307,6 +1422,28 @@ async def obtener_reportes():
                 except ValueError:
                     timestamp = datetime.now().isoformat()
             
+            # Manejar fechas de eventos
+            fecha_inicio = None
+            fecha_fin = None
+            
+            if row["fecha_inicio_evento"]:
+                if isinstance(row["fecha_inicio_evento"], datetime):
+                    fecha_inicio = row["fecha_inicio_evento"].isoformat()
+                else:
+                    try:
+                        fecha_inicio = datetime.fromisoformat(str(row["fecha_inicio_evento"])).isoformat()
+                    except (ValueError, AttributeError):
+                        fecha_inicio = None
+            
+            if row["fecha_fin_evento"]:
+                if isinstance(row["fecha_fin_evento"], datetime):
+                    fecha_fin = row["fecha_fin_evento"].isoformat()
+                else:
+                    try:
+                        fecha_fin = datetime.fromisoformat(str(row["fecha_fin_evento"])).isoformat()
+                    except (ValueError, AttributeError):
+                        fecha_fin = None
+            
             reportes.append(ReporteResponse(
                 id=int(row["id"]),
                 latitud=lat,
@@ -1315,7 +1452,8 @@ async def obtener_reportes():
                 foto_base64=row["foto_base64"] or "",  # Evitar None en foto_base64
                 descripcion=row["descripcion"] or "",  # Convertir None a string vacío
                 tipo_reporte=row["tipo_reporte"] or "general",  # Usar valor por defecto si es None
-                aforo=row.get("aforo")  # Puede ser None
+                fecha_inicio_evento=fecha_inicio,
+                fecha_fin_evento=fecha_fin
             ))
         
         cursor.close()
@@ -1397,6 +1535,229 @@ async def info_usuarios():
         conn.close()
         
         return {"usuarios": usuarios}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+# --- Endpoints para Aforo de Lugares de Interés ---
+
+@app.post("/aforo/registrar", response_model=AforoLugarResponse)
+async def registrar_aforo(data: AforoLugarCreate):
+    """
+    Endpoint para recibir datos de aforo desde el servidor de procesamiento de imágenes
+    URL: http://TU-SERVIDOR-PRINCIPAL:5000/aforo/registrar
+    """
+    try:
+        # Validaciones
+        if not data.foto_base64:
+            raise HTTPException(status_code=400, detail="foto_base64 es requerida")
+        
+        if not data.timestamp:
+            raise HTTPException(status_code=400, detail="timestamp es requerido")
+        
+        if data.aforo < 0:
+            raise HTTPException(status_code=400, detail="aforo debe ser mayor o igual a 0")
+        
+        # Parsear timestamp y convertir a zona horaria de Bogotá
+        try:
+            timestamp_dt = datetime.fromisoformat(data.timestamp.replace('Z', '+00:00'))
+            # Si el timestamp no tiene zona horaria, asumimos UTC y convertimos a Bogotá
+            if timestamp_dt.tzinfo is None:
+                timestamp_dt = timestamp_dt.replace(tzinfo=ZoneInfo("UTC")).astimezone(ZoneInfo("America/Bogota"))
+            else:
+                # Si ya tiene zona horaria, convertir a Bogotá
+                timestamp_dt = timestamp_dt.astimezone(ZoneInfo("America/Bogota"))
+            # Remover info de zona horaria para almacenar en MySQL (guardar como hora local de Bogotá)
+            timestamp_dt = timestamp_dt.replace(tzinfo=None)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Formato de timestamp inválido. Use ISO 8601")
+        
+        conn = get_db_connection()
+        if conn is None:
+            raise HTTPException(status_code=500, detail="Error de conexión a la base de datos")
+        
+        cursor = conn.cursor(dictionary=True)
+        
+        # Obtener próximo ID para nombre de archivo
+        cursor.execute("SELECT MAX(id) as max_id FROM aforo_lugares")
+        row = cursor.fetchone()
+        next_id = (row["max_id"] or 0) + 1
+        
+        # Guardar imagen en carpeta específica
+        aforo_folder = os.path.join(IMAGES_FOLDER, "aforo")
+        os.makedirs(aforo_folder, exist_ok=True)
+        
+        try:
+            # Decodificar y guardar imagen
+            image_data = base64.b64decode(data.foto_base64)
+            image = Image.open(BytesIO(image_data))
+            image_filename = f"aforo_{next_id}_{data.lugar_id or 'general'}.jpg"
+            image_path = os.path.join(aforo_folder, image_filename)
+            image.save(image_path, format="JPEG", quality=85)
+            
+            # Ruta relativa para almacenar en BD
+            foto_ruta = f"imagenes_reportes/aforo/{image_filename}"
+            
+        except Exception as img_err:
+            raise HTTPException(status_code=400, detail=f"Error procesando imagen: {str(img_err)}")
+        
+        # Insertar en base de datos
+        cursor.execute('''
+        INSERT INTO aforo_lugares 
+        (foto_ruta, timestamp_captura, aforo, latitud, longitud, lugar_id)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        ''', (
+            foto_ruta,
+            timestamp_dt,
+            data.aforo,
+            data.latitud,
+            data.longitud,
+            data.lugar_id
+        ))
+        
+        aforo_id = cursor.lastrowid
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        print(f"✅ Aforo registrado: ID={aforo_id}, Aforo={data.aforo}, Lugar={data.lugar_id or 'N/A'}")
+        
+        return AforoLugarResponse(
+            success=True,
+            message=f"Aforo registrado exitosamente. {data.aforo} persona(s) detectada(s)",
+            id=aforo_id,
+            aforo=data.aforo,
+            timestamp=timestamp_dt.isoformat()
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error registrando aforo: {e}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+
+@app.get("/aforo/historial")
+async def obtener_historial_aforo(
+    lugar_id: Optional[str] = None,
+    limite: int = 50,
+    orden: str = "desc"
+):
+    """
+    Obtener historial de aforo
+    Parámetros:
+    - lugar_id: Filtrar por lugar específico (opcional)
+    - limite: Número máximo de registros (default: 50)
+    - orden: 'asc' o 'desc' (default: 'desc')
+    """
+    try:
+        if limite > 500:
+            limite = 500  # Límite máximo de seguridad
+        
+        orden_sql = "DESC" if orden.lower() == "desc" else "ASC"
+        
+        conn = get_db_connection()
+        if conn is None:
+            raise HTTPException(status_code=500, detail="Error de conexión a la base de datos")
+        
+        cursor = conn.cursor(dictionary=True)
+        
+        # Construir query
+        if lugar_id:
+            cursor.execute(f'''
+            SELECT id, foto_ruta, timestamp_captura, aforo, latitud, longitud, lugar_id, created_at
+            FROM aforo_lugares
+            WHERE lugar_id = %s
+            ORDER BY timestamp_captura {orden_sql}
+            LIMIT %s
+            ''', (lugar_id, limite))
+        else:
+            cursor.execute(f'''
+            SELECT id, foto_ruta, timestamp_captura, aforo, latitud, longitud, lugar_id, created_at
+            FROM aforo_lugares
+            ORDER BY timestamp_captura {orden_sql}
+            LIMIT %s
+            ''', (limite,))
+        
+        registros = []
+        for row in cursor:
+            registros.append({
+                "id": row["id"],
+                "foto_ruta": row["foto_ruta"],
+                "timestamp_captura": row["timestamp_captura"].isoformat() if row["timestamp_captura"] else None,
+                "aforo": row["aforo"],
+                "latitud": float(row["latitud"]) if row["latitud"] else None,
+                "longitud": float(row["longitud"]) if row["longitud"] else None,
+                "lugar_id": row["lugar_id"],
+                "created_at": row["created_at"].isoformat() if row["created_at"] else None
+            })
+        
+        cursor.close()
+        conn.close()
+        
+        return {
+            "success": True,
+            "total": len(registros),
+            "registros": registros
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+@app.get("/aforo/estadisticas")
+async def obtener_estadisticas_aforo(lugar_id: Optional[str] = None):
+    """
+    Obtener estadísticas de aforo
+    Parámetros:
+    - lugar_id: Estadísticas de un lugar específico (opcional)
+    """
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            raise HTTPException(status_code=500, detail="Error de conexión a la base de datos")
+        
+        cursor = conn.cursor(dictionary=True)
+        
+        # Estadísticas globales o por lugar
+        if lugar_id:
+            cursor.execute('''
+            SELECT 
+                COUNT(*) as total_registros,
+                AVG(aforo) as aforo_promedio,
+                MAX(aforo) as aforo_maximo,
+                MIN(aforo) as aforo_minimo,
+                MAX(timestamp_captura) as ultimo_registro
+            FROM aforo_lugares
+            WHERE lugar_id = %s
+            ''', (lugar_id,))
+        else:
+            cursor.execute('''
+            SELECT 
+                COUNT(*) as total_registros,
+                AVG(aforo) as aforo_promedio,
+                MAX(aforo) as aforo_maximo,
+                MIN(aforo) as aforo_minimo,
+                MAX(timestamp_captura) as ultimo_registro,
+                COUNT(DISTINCT lugar_id) as total_lugares
+            FROM aforo_lugares
+            ''')
+        
+        stats = cursor.fetchone()
+        
+        cursor.close()
+        conn.close()
+        
+        return {
+            "success": True,
+            "lugar_id": lugar_id,
+            "estadisticas": {
+                "total_registros": stats["total_registros"] or 0,
+                "aforo_promedio": round(float(stats["aforo_promedio"] or 0), 2),
+                "aforo_maximo": stats["aforo_maximo"] or 0,
+                "aforo_minimo": stats["aforo_minimo"] or 0,
+                "ultimo_registro": stats["ultimo_registro"].isoformat() if stats.get("ultimo_registro") else None,
+                "total_lugares": stats.get("total_lugares", 1 if lugar_id else 0)
+            }
+        }
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")

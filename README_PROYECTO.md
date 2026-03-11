@@ -40,10 +40,8 @@ Este componente constituye el **núcleo del sistema de reportes GPS**, un backen
 
 | Archivo                     | Descripción                                                    |
 |-----------------------------|----------------------------------------------------------------|
-| `main.py`                   | API principal FastAPI (puerto 5000)                            |
-| `mainIMG.py`                | Servidor de procesamiento de imágenes con YOLOv8 (puerto 8000) |
-| `init_db.py`                | Script de inicialización de base de datos MySQL                |
-| `gestionar_db.py`           | Utilidades para gestión y limpieza de la base de datos         |
+| `main.py`                   | API principal FastAPI (puerto 5000) Servidor 1                 |
+| `mainIMG.py`                | Procesamiento de imágenes con YOLOv8 (puerto 8000) Servidor 2  |
 | `mapa.html`                 | Interfaz web con mapa interactivo Leaflet                      |
 | `requirements.txt`          | Dependencias de Python para API principal                      |
 | `requirements_img.txt`      | Dependencias para servidor de procesamiento de imágenes        |
@@ -214,6 +212,8 @@ Interfaz web que visualiza todos los reportes en un mapa usando:
 - Actualización automática cada 30 segundos
 - Estadísticas en tiempo real
 - Galería de últimas 5 fotos
+  
+<img width="1895" height="950" alt="image" src="https://github.com/user-attachments/assets/579685ad-a1e3-4206-9f1e-6f70179700da" />
 
 ---
 

@@ -8,6 +8,9 @@ Este componente constituye el **núcleo del sistema de reportes GPS**, un backen
 
 ## 🏗️ Arquitectura del Sistema
 
+<img width="1260" height="982" alt="image" src="https://github.com/user-attachments/assets/af4506c0-777f-4137-8ebe-a056973ae20b" />
+
+
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
 │                    ARQUITECTURA GENERAL                               │

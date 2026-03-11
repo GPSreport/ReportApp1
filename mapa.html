@@ -412,12 +412,12 @@
             background: rgba(255,255,255,0.95);
             backdrop-filter: blur(20px);
             border-radius: var(--border-radius);
-            padding: 20px;
+            padding: 25px;
             box-shadow: var(--shadow-medium);
             border: 1px solid rgba(255,255,255,0.3);
             position: relative;
             overflow: hidden;
-            min-height: 150px;
+            max-height: 500px;
         }
 
         .places-container::before {
@@ -433,36 +433,134 @@
         .places-container h5 {
             color: var(--text-dark);
             font-weight: 600;
-            margin-bottom: 15px;
+            margin-bottom: 20px;
             display: flex;
             align-items: center;
             gap: 10px;
         }
 
         .places-content {
+            max-height: 400px;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+
+        /* Mismo scrollbar que photos-grid */
+        .places-content::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .places-content::-webkit-scrollbar-track {
+            background: rgba(0,0,0,0.1);
+            border-radius: 3px;
+        }
+
+        .places-content::-webkit-scrollbar-thumb {
+            background: #17a2b8;
+            border-radius: 3px;
+        }
+
+        .aforo-item {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid rgba(0,0,0,0.1);
+            border-radius: 15px;
+            background: white;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .aforo-item::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(45deg, rgba(23, 162, 184, 0.05), rgba(19, 132, 150, 0.05));
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+        }
+        
+        .aforo-item:hover {
+            transform: translateY(-8px) scale(1.02);
+            box-shadow: var(--shadow-heavy);
+            border-color: #17a2b8;
+        }
+
+        .aforo-item:hover::before {
+            opacity: 1;
+        }
+        
+        .aforo-item img {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: transform 0.3s ease;
+        }
+
+        .aforo-item:hover img {
+            transform: scale(1.05);
+        }
+
+        .aforo-item-info {
+            margin-top: 10px;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .aforo-stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(0,0,0,0.1);
+        }
+
+        .aforo-stat {
             text-align: center;
-            padding: 20px 10px;
+            padding: 8px;
+            background: rgba(23, 162, 184, 0.1);
+            border-radius: 8px;
+        }
+
+        .aforo-stat-number {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #17a2b8;
+        }
+
+        .aforo-stat-label {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-top: 2px;
+        }
+
+        .places-loading {
+            text-align: center;
+            padding: 40px 20px;
             color: var(--text-muted);
         }
 
-        .places-coming-soon {
-            font-size: 1.2rem;
+        .places-empty {
+            text-align: center;
+            padding: 40px 20px;
             color: var(--text-muted);
-            margin-bottom: 10px;
         }
 
-        .places-description {
-            font-size: 0.9rem;
-            color: var(--text-muted);
-            font-style: italic;
-            line-height: 1.4;
-        }
-
-        .places-icon {
+        .places-empty i {
             font-size: 2.5rem;
             color: #17a2b8;
             margin-bottom: 15px;
-            opacity: 0.7;
+            opacity: 0.5;
         }
 
         /* Filters container */
@@ -528,6 +626,55 @@
 
         .filter-pill i {
             font-size: 0.8rem;
+        }
+
+        /* Colores específicos para cada filtro */
+        .filter-pill[data-filter="todos"] i {
+            color: rgba(255, 255, 255, 0.9);
+        }
+        .filter-pill[data-filter="todos"].active i {
+            color: white;
+        }
+
+        .filter-pill[data-filter="Daños en Planta Urbanisticas"] i {
+            color: #dc3545; /* Rojo */
+        }
+        .filter-pill[data-filter="Daños en Planta Urbanisticas"].active i {
+            color: white;
+        }
+
+        .filter-pill[data-filter="Eventos Culturales"] i {
+            color: #9b59b6; /* Púrpura */
+        }
+        .filter-pill[data-filter="Eventos Culturales"].active i {
+            color: white;
+        }
+
+        .filter-pill[data-filter="Eventos Deportivos"] i {
+            color: #28a745; /* Verde */
+        }
+        .filter-pill[data-filter="Eventos Deportivos"].active i {
+            color: white;
+        }
+
+        .filter-pill[data-filter="Obras en Proceso"] i {
+            color: #fd7e14; /* Naranja */
+        }
+        .filter-pill[data-filter="Obras en Proceso"].active i {
+            color: white;
+        }
+
+        .filter-pill[data-filter="lugares_interes"] i {
+            color: #17a2b8; /* Cian */
+        }
+        .filter-pill[data-filter="lugares_interes"].active i {
+            color: white;
+        }
+
+        /* Estilos para marcadores personalizados */
+        .custom-marker-icon {
+            background: none;
+            border: none;
         }
 
         /* Responsive filters */
@@ -1029,6 +1176,201 @@
         .updating .last-update-indicator i {
             animation: rotate 1s linear infinite;
         }
+
+        /* Botón de historial de aforo */
+        .btn-historial {
+            width: 100%;
+            margin-top: 15px;
+            background: var(--primary-gradient);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(108, 92, 231, 0.3);
+        }
+
+        .btn-historial:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(108, 92, 231, 0.4);
+        }
+
+        /* Tabla de historial */
+        .historial-table-container {
+            max-height: 500px;
+            overflow-y: auto;
+            margin-top: 20px;
+            border-radius: 8px;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+        }
+
+        .historial-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .historial-table thead {
+            position: sticky;
+            top: 0;
+            background: var(--primary-gradient);
+            color: white;
+            z-index: 10;
+        }
+
+        .historial-table thead th {
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .historial-table tbody tr {
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+            transition: background-color 0.2s ease;
+        }
+
+        .historial-table tbody tr:hover {
+            background-color: rgba(108, 92, 231, 0.05);
+        }
+
+        .historial-table tbody td {
+            padding: 12px 15px;
+            color: var(--text-dark);
+        }
+
+        .historial-table tbody td:first-child {
+            font-weight: 500;
+        }
+
+        .historial-table tbody td:last-child {
+            text-align: center;
+            font-weight: 600;
+            color: var(--accent-color);
+        }
+
+        .aforo-badge {
+            background: var(--primary-gradient);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* Colores dinámicos para el aforo según nivel de ocupación */
+        .aforo-stat-number.low {
+            color: #10b981; /* Verde - Ocupación baja */
+        }
+
+        .aforo-stat-number.medium {
+            color: #f59e0b; /* Amarillo - Ocupación media */
+        }
+
+        .aforo-stat-number.high {
+            color: #ef4444; /* Rojo - Ocupación alta */
+        }
+
+        .aforo-stat-number.full {
+            color: #dc2626; /* Rojo oscuro - Capacidad máxima */
+            animation: pulse-alert 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse-alert {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        /* Indicador de capacidad */
+        .capacity-indicator {
+            margin-top: 8px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .capacity-bar {
+            flex: 1;
+            height: 6px;
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .capacity-fill {
+            height: 100%;
+            transition: width 0.3s ease, background-color 0.3s ease;
+            border-radius: 3px;
+        }
+
+        .capacity-fill.low {
+            background: linear-gradient(90deg, #10b981, #34d399);
+        }
+
+        .capacity-fill.medium {
+            background: linear-gradient(90deg, #f59e0b, #fbbf24);
+        }
+
+        .capacity-fill.high {
+            background: linear-gradient(90deg, #ef4444, #f87171);
+        }
+
+        .capacity-fill.full {
+            background: linear-gradient(90deg, #dc2626, #ef4444);
+        }
+
+        /* Filtro de intervalo */
+        .interval-filter {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .interval-option {
+            flex: 1;
+            min-width: 120px;
+            padding: 10px 15px;
+            background: rgba(255, 255, 255, 0.9);
+            border: 2px solid rgba(108, 92, 231, 0.2);
+            border-radius: 8px;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+
+        .interval-option:hover {
+            border-color: var(--accent-color);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(108, 92, 231, 0.2);
+        }
+
+        .interval-option.active {
+            background: var(--primary-gradient);
+            color: white;
+            border-color: transparent;
+        }
+
+        .empty-historial {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-muted);
+        }
+
+        .empty-historial i {
+            font-size: 3rem;
+            margin-bottom: 15px;
+            opacity: 0.5;
+        }
     </style>
 </head>
 <body>
@@ -1059,7 +1401,7 @@
                                     Todos
                                 </div>
                                 <div class="filter-pill" data-filter="Daños en Planta Urbanisticas" onclick="toggleFilter(this, 'Daños en Planta Urbanisticas')">
-                                    <i class="fas fa-building-crack"></i>
+                                    <i class="fas fa-triangle-exclamation"></i>
                                     Daños Urbanísticos
                                 </div>
                                 <div class="filter-pill" data-filter="Eventos Culturales" onclick="toggleFilter(this, 'Eventos Culturales')">
@@ -1074,21 +1416,20 @@
                                     <i class="fas fa-hard-hat"></i>
                                     Obras en Proceso
                                 </div>
+                                <div class="filter-pill" data-filter="lugares_interes" onclick="toggleFilter(this, 'lugares_interes')">
+                                    <i class="fas fa-map-pin"></i>
+                                    Lugares de Interés
+                                </div>
                             </div>
                         </div>
                         
                         <!-- Lugares de Interés -->
                         <div class="places-container">
                             <h5><i class="fas fa-map-marked-alt"></i> Lugares de Interés</h5>
-                            <div class="places-content">
-                                <div class="places-icon">
-                                    <i class="fas fa-cog fa-spin"></i>
-                                </div>
-                                <div class="places-coming-soon">
-                                    Próximamente disponible
-                                </div>
-                                <div class="places-description">
-                                    Este módulo mostrará información de lugares de interés detectados por hardware especializado que se encuentra en desarrollo.
+                            <div class="places-content" id="aforoContainer">
+                                <div class="places-loading">
+                                    <i class="fas fa-spinner loading-spinner"></i>
+                                    <p>Cargando datos...</p>
                                 </div>
                             </div>
                         </div>
@@ -1129,7 +1470,7 @@
                     </div>
                 </div>
                 
-                <!-- Columna del mapa (ahora a la derecha) -->
+                <!-- Columna del mapa -->
                 <div class="col-lg-8">
                     <div class="map-container">
                         <div id="map"></div>
@@ -1161,6 +1502,43 @@
                         <img id="modalImage" src="" class="img-fluid">
                     </div>
                     <div id="modalInfo" class="modal-report-info"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para historial de aforo -->
+    <div class="modal fade" id="historialModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-history"></i> Historial de Aforo</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Filtro de intervalo -->
+                    <div class="interval-filter">
+                        <div class="interval-option active" data-interval="1" onclick="seleccionarIntervalo(this, 1)">
+                            <i class="fas fa-clock"></i> Última hora
+                        </div>
+                        <div class="interval-option" data-interval="24" onclick="seleccionarIntervalo(this, 24)">
+                            <i class="fas fa-calendar-day"></i> Últimas 24 horas
+                        </div>
+                        <div class="interval-option" data-interval="168" onclick="seleccionarIntervalo(this, 168)">
+                            <i class="fas fa-calendar-week"></i> Última semana
+                        </div>
+                        <div class="interval-option" data-interval="720" onclick="seleccionarIntervalo(this, 720)">
+                            <i class="fas fa-calendar-alt"></i> Último mes
+                        </div>
+                    </div>
+                    
+                    <!-- Tabla de historial -->
+                    <div id="historialTableContainer" class="historial-table-container">
+                        <div class="text-center py-4">
+                            <i class="fas fa-spinner fa-spin" style="font-size: 2rem;"></i>
+                            <p class="mt-2">Cargando historial...</p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1296,6 +1674,21 @@
                 if (!response.ok) throw new Error(`Error ${response.status}: ${response.statusText}`);
                 const reportes = await response.json();
                 
+                // Log de debugging para eventos
+                const eventos = reportes.filter(r => 
+                    r.tipo_reporte === 'Eventos Culturales' || r.tipo_reporte === 'Eventos Deportivos'
+                );
+                console.log(`📊 Total reportes cargados: ${reportes.length}`);
+                console.log(`🎭 Eventos encontrados: ${eventos.length}`);
+                if (eventos.length > 0) {
+                    console.log('📅 Datos de eventos:', eventos.map(e => ({
+                        id: e.id,
+                        tipo: e.tipo_reporte,
+                        fecha_inicio: e.fecha_inicio_evento,
+                        fecha_fin: e.fecha_fin_evento
+                    })));
+                }
+                
                 const statsResponse = await fetch(`${API_BASE_URL}/stats`);
                 const stats = statsResponse.ok ? await statsResponse.json() : null;
                 
@@ -1315,6 +1708,7 @@
                 actualizarMapa(reportesFiltrados, isManualRefresh);
                 actualizarEstadisticas(stats, reportes); // Stats siempre con todos los reportes
                 actualizarFotos(reportes); // Fotos siempre con todos los reportes
+                cargarDatosAforo(); // Cargar datos de aforo
                 
                 showError(null);
                 updateLastRefreshTime(); // Actualizar tiempo de última actualización
@@ -1427,6 +1821,21 @@
 
             if (!reportes || reportes.length === 0) return;
 
+            // Filtrar eventos finalizados hace más de 12 horas
+            const ahora = new Date();
+            const doceHorasAtras = new Date(ahora.getTime() - (12 * 60 * 60 * 1000));
+            
+            reportes = reportes.filter(reporte => {
+                // Si es un evento cultural o deportivo con fecha de fin
+                if ((reporte.tipo_reporte === 'Eventos Culturales' || reporte.tipo_reporte === 'Eventos Deportivos') && reporte.fecha_fin_evento) {
+                    const fechaFin = new Date(reporte.fecha_fin_evento);
+                    // Solo mostrar si el evento NO ha terminado hace más de 12 horas
+                    return fechaFin >= doceHorasAtras;
+                }
+                // Mostrar todos los demás reportes
+                return true;
+            });
+
             const HIGHLIGHT_COUNT = 5;
 
             reportes.forEach((reporte, index) => {
@@ -1470,6 +1879,36 @@
                     contentDiv.appendChild(descP);
                 }
 
+                // Fechas de evento si es evento cultural o deportivo
+                if ((reporte.tipo_reporte === 'Eventos Culturales' || reporte.tipo_reporte === 'Eventos Deportivos') && reporte.fecha_inicio_evento) {
+                    console.log(`📅 Evento detectado - ID: ${reporte.id}, Tipo: ${reporte.tipo_reporte}`);
+                    console.log(`   Inicio: ${reporte.fecha_inicio_evento}, Fin: ${reporte.fecha_fin_evento}`);
+                    
+                    const eventoDivider = document.createElement('div');
+                    eventoDivider.style.cssText = 'border-top: 2px solid rgba(108, 92, 231, 0.3); margin: 10px 0 8px 0; padding-top: 10px;';
+                    contentDiv.appendChild(eventoDivider);
+                    
+                    const eventoTitle = document.createElement('p');
+                    eventoTitle.innerHTML = `<i class="fas fa-calendar-alt" style="color: #6c757d;"></i><strong>Horario del Evento:</strong>`;
+                    eventoTitle.style.cssText = 'font-size: 0.95rem; margin-bottom: 8px; color: #6c757d;';
+                    contentDiv.appendChild(eventoTitle);
+                    
+                    const inicioP = document.createElement('p');
+                    inicioP.innerHTML = `<i class="fas fa-calendar-check" style="color: #28a745;"></i><strong>Inicio:</strong> ${formatearFecha(reporte.fecha_inicio_evento)}`;
+                    inicioP.style.cssText = 'font-size: 0.9rem; background: rgba(40, 167, 69, 0.1); padding: 6px 10px; border-radius: 6px; margin-bottom: 6px;';
+                    contentDiv.appendChild(inicioP);
+                    
+                    if (reporte.fecha_fin_evento) {
+                        const finP = document.createElement('p');
+                        finP.innerHTML = `<i class="fas fa-calendar-times" style="color: #dc3545;"></i><strong>Fin:</strong> ${formatearFecha(reporte.fecha_fin_evento)}`;
+                        finP.style.cssText = 'font-size: 0.9rem; background: rgba(220, 53, 69, 0.1); padding: 6px 10px; border-radius: 6px;';
+                        contentDiv.appendChild(finP);
+                    }
+                } else if ((reporte.tipo_reporte === 'Eventos Culturales' || reporte.tipo_reporte === 'Eventos Deportivos')) {
+                    console.log(`⚠️ Evento sin fechas - ID: ${reporte.id}, Tipo: ${reporte.tipo_reporte}`);
+                    console.log(`   fecha_inicio_evento: ${reporte.fecha_inicio_evento}, fecha_fin_evento: ${reporte.fecha_fin_evento}`);
+                }
+
                 popupDiv.appendChild(contentDiv);
 
                 const imgPlaceholder = document.createElement('div');
@@ -1490,8 +1929,9 @@
                 }
                 popupDiv.appendChild(imgPlaceholder);
 
-                // Crear marcador normal (como antes)
-                const marker = L.marker([lat, lng]);
+                // Crear marcador con icono personalizado según tipo de reporte
+                const customIcon = createCustomIcon(reporte.tipo_reporte);
+                const marker = L.marker([lat, lng], { icon: customIcon });
                 marker.bindPopup(popupDiv);
                 marker.addTo(markersGroup);
 
@@ -1633,6 +2073,20 @@
                         <span class="modal-info-value">${reporte.descripcion}</span>
                     </div>
                     ` : ''}
+                    ${(reporte.tipo_reporte === 'Eventos Culturales' || reporte.tipo_reporte === 'Eventos Deportivos') && reporte.fecha_inicio_evento ? `
+                    <div class="modal-info-item" style="border-top: 2px solid rgba(108, 92, 231, 0.2); margin-top: 12px; padding-top: 12px; background: rgba(108, 92, 231, 0.05); border-radius: 8px; padding: 10px;">
+                        <i class="fas fa-calendar-check modal-info-icon" style="color: #28a745;"></i>
+                        <span class="modal-info-label">Inicio del Evento:</span>
+                        <span class="modal-info-value"><strong>${formatearFecha(reporte.fecha_inicio_evento)}</strong></span>
+                    </div>
+                    ` : ''}
+                    ${(reporte.tipo_reporte === 'Eventos Culturales' || reporte.tipo_reporte === 'Eventos Deportivos') && reporte.fecha_fin_evento ? `
+                    <div class="modal-info-item" style="background: rgba(220, 53, 69, 0.05); border-radius: 8px; padding: 10px;">
+                        <i class="fas fa-calendar-times modal-info-icon" style="color: #dc3545;"></i>
+                        <span class="modal-info-label">Fin del Evento:</span>
+                        <span class="modal-info-value"><strong>${formatearFecha(reporte.fecha_fin_evento)}</strong></span>
+                    </div>
+                    ` : ''}
                 `;
             } else {
                 // Formato simple para compatibilidad
@@ -1649,6 +2103,223 @@
                     </div>
                 `;
             }
+            
+            const bsModal = new bootstrap.Modal(document.getElementById('photoModal'), {});
+            bsModal.show();
+        }
+
+        // Cargar datos de aforo desde el servidor
+        async function cargarDatosAforo() {
+            const container = document.getElementById('aforoContainer');
+            
+            try {
+                // Obtener historial de aforo (solo el último registro)
+                const historialResponse = await fetch(`${API_BASE_URL}/aforo/historial?limite=1&orden=desc`);
+                
+                if (!historialResponse.ok) {
+                    throw new Error('No se pudo cargar el historial de aforo');
+                }
+                
+                const historialData = await historialResponse.json();
+                const registros = historialData.registros || [];
+                
+                if (registros.length === 0) {
+                    container.innerHTML = `
+                        <div class="places-empty">
+                            <i class="fas fa-map-marked-alt"></i>
+                            <p>No hay datos disponibles</p>
+                            <small>Esperando capturas del sistema de monitoreo</small>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                container.innerHTML = '';
+                
+                // Mostrar solo el último registro de aforo
+                const registro = registros[0];
+                const item = document.createElement('div');
+                item.className = 'aforo-item';
+                
+                // Imagen
+                const img = document.createElement('img');
+                img.alt = `Aforo #${registro.id}`;
+                img.style.cursor = 'pointer';
+                img.src = registro.foto_ruta.startsWith('/') ? registro.foto_ruta : `/${registro.foto_ruta}`;
+                img.addEventListener('click', () => {
+                    mostrarAforoModal(img.src, registro);
+                });
+                
+                // Información básica
+                const info = document.createElement('div');
+                info.className = 'aforo-item-info';
+                info.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span><i class="fas fa-map-marker-alt"></i> Bloque L, Piso 3, 1L6-38</span>
+                        <span><i class="fas fa-clock"></i> ${formatearFecha(registro.timestamp_captura)}</span>
+                    </div>
+                `;
+                
+                // Estadísticas del registro - Solo personas
+                const stats = document.createElement('div');
+                stats.className = 'aforo-stats';
+                
+                // Configuración de capacidad por lugar
+                const capacidadMaxima = 16; // Bloque L, Piso 3, 1L6-38
+                const porcentajeOcupacion = (registro.aforo / capacidadMaxima) * 100;
+                
+                // Determinar nivel de ocupación y color
+                let nivelOcupacion = 'low';
+                if (porcentajeOcupacion >= 100) {
+                    nivelOcupacion = 'full';
+                } else if (porcentajeOcupacion >= 75) {
+                    nivelOcupacion = 'high';
+                } else if (porcentajeOcupacion >= 50) {
+                    nivelOcupacion = 'medium';
+                }
+                
+                stats.innerHTML = `
+                    <div class="aforo-stat" style="grid-column: 1 / -1;">
+                        <div class="aforo-stat-number ${nivelOcupacion}">${registro.aforo}</div>
+                        <div class="aforo-stat-label">Personas Detectadas</div>
+                        <div class="capacity-indicator">
+                            <span style="font-size: 0.75rem;">${registro.aforo}/${capacidadMaxima}</span>
+                            <div class="capacity-bar">
+                                <div class="capacity-fill ${nivelOcupacion}" style="width: ${Math.min(porcentajeOcupacion, 100)}%"></div>
+                            </div>
+                            <span style="font-size: 0.75rem;">${Math.round(porcentajeOcupacion)}%</span>
+                        </div>
+                    </div>
+                `;
+                
+                // Botón de historial
+                const btnHistorial = document.createElement('button');
+                btnHistorial.className = 'btn-historial';
+                btnHistorial.innerHTML = '<i class="fas fa-history"></i> Mostrar Historial';
+                btnHistorial.onclick = () => mostrarModalHistorial();
+                
+                item.appendChild(img);
+                item.appendChild(info);
+                item.appendChild(stats);
+                item.appendChild(btnHistorial);
+                container.appendChild(item);
+                
+                // Crear marcador en el mapa para el lugar de interés (si tiene coordenadas)
+                if (registro.latitud && registro.longitud) {
+                    // Remover marcador anterior si existe
+                    if (aforoMarker) {
+                        markersGroup.removeLayer(aforoMarker);
+                    }
+                    
+                    // Crear popup para el lugar de interés
+                    const aforoPopupDiv = document.createElement('div');
+                    aforoPopupDiv.className = 'marker-popup';
+                    
+                    const aforoContentDiv = document.createElement('div');
+                    aforoContentDiv.className = 'popup-content';
+                    
+                    const aforoBadge = document.createElement('div');
+                    aforoBadge.className = 'popup-type-badge';
+                    aforoBadge.style.background = 'linear-gradient(135deg, #17a2b8, #138496)';
+                    aforoBadge.innerHTML = '<i class="fas fa-map-pin"></i> Lugar de Interés';
+                    aforoContentDiv.appendChild(aforoBadge);
+                    
+                    const aforoTitle = document.createElement('h6');
+                    aforoTitle.innerHTML = '<i class="fas fa-building"></i> Bloque L, Piso 3, 1L6-38';
+                    aforoContentDiv.appendChild(aforoTitle);
+                    
+                    const aforoData = document.createElement('p');
+                    aforoData.innerHTML = `<i class="fas fa-users"></i><strong>Aforo actual:</strong> ${registro.aforo} persona${registro.aforo !== 1 ? 's' : ''} (${Math.round(porcentajeOcupacion)}%)`;
+                    aforoContentDiv.appendChild(aforoData);
+                    
+                    const aforoFecha = document.createElement('p');
+                    aforoFecha.innerHTML = `<i class="fas fa-clock"></i><strong>Actualizado:</strong> ${formatearFecha(registro.timestamp_captura)}`;
+                    aforoContentDiv.appendChild(aforoFecha);
+                    
+                    aforoPopupDiv.appendChild(aforoContentDiv);
+                    
+                    // Agregar imagen al popup
+                    const aforoImgPlaceholder = document.createElement('div');
+                    aforoImgPlaceholder.className = 'popup-image-container';
+                    const aforoImgPopup = document.createElement('img');
+                    aforoImgPopup.src = registro.foto_ruta.startsWith('/') ? registro.foto_ruta : `/${registro.foto_ruta}`;
+                    aforoImgPopup.addEventListener('click', () => {
+                        mostrarAforoModal(aforoImgPopup.src, registro);
+                    });
+                    aforoImgPlaceholder.appendChild(aforoImgPopup);
+                    aforoPopupDiv.appendChild(aforoImgPlaceholder);
+                    
+                    // Crear marcador con icono personalizado
+                    const aforoIcon = createCustomIcon('lugares_interes');
+                    aforoMarker = L.marker([registro.latitud, registro.longitud], { icon: aforoIcon });
+                    aforoMarker.bindPopup(aforoPopupDiv);
+                    aforoMarker.addTo(markersGroup);
+                    aforoMarker.setZIndexOffset(2000); // Mayor prioridad visual
+                }
+                
+            } catch (error) {
+                console.error('Error al cargar datos de aforo:', error);
+                container.innerHTML = `
+                    <div class="places-empty">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <p>Error al cargar datos</p>
+                        <small>${error.message}</small>
+                    </div>
+                `;
+            }
+        }
+
+        // Mostrar modal con imagen de aforo
+        function mostrarAforoModal(src, registro) {
+            const modalImage = document.getElementById('modalImage');
+            const modalInfo = document.getElementById('modalInfo');
+            modalImage.src = src;
+            
+            // Configuración de capacidad y nivel
+            const capacidadMaxima = 16;
+            const porcentajeOcupacion = (registro.aforo / capacidadMaxima) * 100;
+            let nivelOcupacion = 'low';
+            let estadoTexto = '✅ Disponible';
+            let colorEstado = '#10b981';
+            
+            if (porcentajeOcupacion >= 100) {
+                nivelOcupacion = 'full';
+                estadoTexto = '🚫 Lleno';
+                colorEstado = '#dc2626';
+            } else if (porcentajeOcupacion >= 75) {
+                nivelOcupacion = 'high';
+                estadoTexto = '⚠️ Casi lleno';
+                colorEstado = '#ef4444';
+            } else if (porcentajeOcupacion >= 50) {
+                nivelOcupacion = 'medium';
+                estadoTexto = '⚡ Media ocupación';
+                colorEstado = '#f59e0b';
+            }
+            
+            modalInfo.innerHTML = `
+                <div class="modal-report-info">
+                    <div class="modal-info-item">
+                        <i class="fas fa-building modal-info-icon"></i>
+                        <span class="modal-info-label">Lugar:</span>
+                        <span class="modal-info-value"><strong>Bloque L, Piso 3, 1L6-38</strong></span>
+                    </div>
+                    <div class="modal-info-item">
+                        <i class="fas fa-users modal-info-icon"></i>
+                        <span class="modal-info-label">Aforo:</span>
+                        <span class="modal-info-value"><strong style="color: ${colorEstado}">${registro.aforo}/${capacidadMaxima} persona${registro.aforo !== 1 ? 's' : ''}</strong> (${Math.round(porcentajeOcupacion)}%)</span>
+                    </div>
+                    <div class="modal-info-item">
+                        <i class="fas fa-info-circle modal-info-icon"></i>
+                        <span class="modal-info-label">Estado:</span>
+                        <span class="modal-info-value" style="color: ${colorEstado}; font-weight: 600;">${estadoTexto}</span>
+                    </div>
+                    <div class="modal-info-item">
+                        <i class="fas fa-calendar-alt modal-info-icon"></i>
+                        <span class="modal-info-label">Captura:</span>
+                        <span class="modal-info-value">${formatearFecha(registro.timestamp_captura)}</span>
+                    </div>
+                </div>
+            `;
             
             const bsModal = new bootstrap.Modal(document.getElementById('photoModal'), {});
             bsModal.show();
@@ -1869,6 +2540,182 @@
         // Variables para filtros
         let currentFilter = 'todos';
         let allReportes = [];
+        
+        // Variables para historial de aforo
+        let currentInterval = 1; // Intervalo en horas (por defecto: última hora)
+        let historialModal = null;
+        
+        // Marcador de lugar de interés (aforo)
+        let aforoMarker = null;
+
+        // Función para obtener color del marcador según tipo de reporte
+        function getMarkerColor(tipoReporte) {
+            const colores = {
+                'Daños en Planta Urbanisticas': '#dc3545', // Rojo
+                'Eventos Culturales': '#9b59b6', // Púrpura
+                'Eventos Deportivos': '#28a745', // Verde
+                'Obras en Proceso': '#fd7e14', // Naranja
+                'lugares_interes': '#17a2b8', // Cian (para lugares de interés/aforo)
+                'default': '#6c757d' // Gris por defecto
+            };
+            return colores[tipoReporte] || colores['default'];
+        }
+
+        // Función para crear icono de marcador personalizado
+        function createCustomIcon(tipoReporte) {
+            const color = getMarkerColor(tipoReporte);
+            
+            const svgIcon = `
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 36" width="32" height="48">
+                    <path fill="${color}" stroke="#fff" stroke-width="2" 
+                          d="M12 0C7.03 0 3 4.03 3 9c0 6.75 9 18 9 18s9-11.25 9-18c0-4.97-4.03-9-9-9z"/>
+                    <circle cx="12" cy="9" r="4" fill="#fff"/>
+                </svg>
+            `;
+            
+            return L.divIcon({
+                className: 'custom-marker-icon',
+                html: svgIcon,
+                iconSize: [32, 48],
+                iconAnchor: [16, 48],
+                popupAnchor: [0, -48]
+            });
+        }
+
+        // Función para mostrar el modal de historial
+        function mostrarModalHistorial() {
+            if (!historialModal) {
+                historialModal = new bootstrap.Modal(document.getElementById('historialModal'), {});
+            }
+            historialModal.show();
+            
+            // Cargar datos del historial
+            cargarHistorialAforo(currentInterval);
+        }
+
+        // Función para seleccionar intervalo de tiempo
+        function seleccionarIntervalo(element, horas) {
+            // Remover clase active de todas las opciones
+            document.querySelectorAll('.interval-option').forEach(opt => {
+                opt.classList.remove('active');
+            });
+            
+            // Agregar clase active a la opción seleccionada
+            element.classList.add('active');
+            
+            // Actualizar intervalo actual
+            currentInterval = horas;
+            
+            // Recargar historial con nuevo intervalo
+            cargarHistorialAforo(horas);
+        }
+
+        // Función para cargar historial de aforo con intervalo específico
+        async function cargarHistorialAforo(horasAtras) {
+            const container = document.getElementById('historialTableContainer');
+            
+            try {
+                container.innerHTML = `
+                    <div class="text-center py-4">
+                        <i class="fas fa-spinner fa-spin" style="font-size: 2rem;"></i>
+                        <p class="mt-2">Cargando historial...</p>
+                    </div>
+                `;
+                
+                // Calcular timestamp de inicio (fecha límite para filtrar)
+                const ahora = new Date();
+                const fechaLimite = new Date(ahora.getTime() - (horasAtras * 60 * 60 * 1000));
+                
+                // Obtener historial completo (máximo 500 registros)
+                const response = await fetch(`${API_BASE_URL}/aforo/historial?limite=500&orden=desc`);
+                
+                if (!response.ok) {
+                    throw new Error('No se pudo cargar el historial');
+                }
+                
+                const data = await response.json();
+                let registros = data.registros || [];
+                
+                // Filtrar registros por intervalo de tiempo
+                registros = registros.filter(registro => {
+                    const fechaRegistro = new Date(registro.timestamp_captura);
+                    return fechaRegistro >= fechaLimite;
+                });
+                
+                if (registros.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-historial">
+                            <i class="fas fa-inbox"></i>
+                            <p><strong>No hay registros en este intervalo</strong></p>
+                            <small>Intenta seleccionar un intervalo de tiempo mayor</small>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                // Construir tabla con los registros
+                let tableHTML = `
+                    <table class="historial-table">
+                        <thead>
+                            <tr>
+                                <th><i class="fas fa-calendar-alt"></i> Fecha y Hora</th>
+                                <th style="text-align: center;"><i class="fas fa-users"></i> Aforo</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+                
+                registros.forEach(registro => {
+                    const fechaFormateada = formatearFechaCompleta(registro.timestamp_captura);
+                    tableHTML += `
+                        <tr>
+                            <td>${fechaFormateada}</td>
+                            <td>
+                                <span class="aforo-badge">
+                                    <i class="fas fa-user"></i>
+                                    ${registro.aforo} persona${registro.aforo !== 1 ? 's' : ''}
+                                </span>
+                            </td>
+                        </tr>
+                    `;
+                });
+                
+                tableHTML += `
+                        </tbody>
+                    </table>
+                `;
+                
+                container.innerHTML = tableHTML;
+                
+            } catch (error) {
+                console.error('Error al cargar historial:', error);
+                container.innerHTML = `
+                    <div class="empty-historial">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <p><strong>Error al cargar el historial</strong></p>
+                        <small>${error.message}</small>
+                    </div>
+                `;
+            }
+        }
+
+        // Función para formatear fecha de forma completa
+        function formatearFechaCompleta(timestamp) {
+            if (!timestamp) return '';
+            try {
+                const d = new Date(timestamp);
+                return d.toLocaleString('es-CO', { 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: '2-digit', 
+                    hour: '2-digit', 
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+            } catch (e) {
+                return timestamp;
+            }
+        }
 
         // Función para manejar filtros
         function toggleFilter(element, filterType) {
@@ -1896,20 +2743,43 @@
             let reportesFiltrados;
             if (currentFilter === 'todos') {
                 reportesFiltrados = allReportes;
+                // Mostrar marcador de aforo si existe
+                if (aforoMarker) {
+                    aforoMarker.addTo(markersGroup);
+                }
+            } else if (currentFilter === 'lugares_interes') {
+                // Mostrar solo el marcador de aforo
+                reportesFiltrados = [];
+                if (aforoMarker) {
+                    aforoMarker.addTo(markersGroup);
+                }
             } else {
                 reportesFiltrados = allReportes.filter(reporte => 
                     reporte.tipo_reporte === currentFilter
                 );
+                // Ocultar marcador de aforo en filtros específicos
+                if (aforoMarker) {
+                    markersGroup.removeLayer(aforoMarker);
+                }
             }
             
             // Actualizar mapa con reportes filtrados
             actualizarMapa(reportesFiltrados, false);
             
+            // Re-agregar marcador de aforo si corresponde
+            if (currentFilter === 'todos' || currentFilter === 'lugares_interes') {
+                if (aforoMarker && !markersGroup.hasLayer(aforoMarker)) {
+                    aforoMarker.addTo(markersGroup);
+                }
+            }
+            
             // Mostrar mensaje informativo
             const totalFiltrados = reportesFiltrados.length;
             const totalGeneral = allReportes.length;
             
-            if (currentFilter !== 'todos') {
+            if (currentFilter === 'lugares_interes') {
+                console.log('Mostrando lugares de interés (aforo)');
+            } else if (currentFilter !== 'todos') {
                 console.log(`Mostrando ${totalFiltrados} de ${totalGeneral} reportes (filtro: ${currentFilter})`);
             }
         }

@@ -5,7 +5,7 @@ Servidor FastAPI dedicado para:
 1. Recibir imágenes base64 desde ESP32
 2. Procesar con YOLOv8 para detectar personas
 3. Calcular aforo (número de personas detectadas)
-4. Enviar resultados (imagen + aforo) a la API principal (main.py)
+4. Enviar resultados (imagen + aforo) a la API principal
 
 Instancia: c7i-flex.large (2 vCPU, 4GB RAM)
 IP Pública: 18.116.117.140
@@ -22,6 +22,7 @@ from PIL import Image, ImageDraw, ImageFont
 import cv2
 import numpy as np
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import os
 from dotenv import load_dotenv
 import httpx
@@ -41,7 +42,7 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # Configuración
-API_PRINCIPAL_URL = os.getenv('API_PRINCIPAL_URL', 'http://localhost:5000')
+API_PRINCIPAL_URL = os.getenv('API_PRINCIPAL_URL', 'http://3.148.29.34')
 MODELO_YOLO = os.getenv('MODELO_YOLO', 'yolov8n.pt')  # yolov8n = nano (más rápido)
 CONFIANZA_MIN = float(os.getenv('CONFIANZA_MIN', '0.45'))  # Umbral de confianza
 PUERTO = int(os.getenv('PUERTO_IMG', '8000'))
@@ -76,8 +77,7 @@ class ImagenESP32Request(BaseModel):
     timestamp: Optional[str] = None
     latitud: Optional[float] = None
     longitud: Optional[float] = None
-    descripcion: Optional[str] = None
-    tipo_reporte: Optional[str] = "aforo"
+    lugar_id: Optional[str] = None  # Identificador del lugar de interés
 
 class ImagenESP32Response(BaseModel):
     """Respuesta al ESP32"""
@@ -262,37 +262,55 @@ async def enviar_a_api_principal(
     latitud: Optional[float] = None,
     longitud: Optional[float] = None,
     descripcion: Optional[str] = None,
-    tipo_reporte: str = "aforo"
+    lugar_id: Optional[str] = None
 ) -> bool:
     """
     Envía los datos procesados a la API principal (main.py)
+    Endpoint: POST /aforo/registrar
     """
     try:
         payload = {
-            "latitud": latitud or 0.0,
-            "longitud": longitud or 0.0,
-            "timestamp": timestamp,
             "foto_base64": foto_base64,
-            "descripcion": descripcion or f"Aforo detectado: {aforo} personas",
-            "tipo_reporte": tipo_reporte,
-            "aforo": aforo  # Campo adicional
+            "timestamp": timestamp,
+            "aforo": aforo,
+            "latitud": latitud,
+            "longitud": longitud,
+            "lugar_id": lugar_id or "general"
         }
+        
+        # URL completa del endpoint
+        url = f"{API_PRINCIPAL_URL}/aforo/registrar"
+        
+        logger.info(f"📤 Enviando a API principal: {url}")
+        logger.info(f"📦 Payload: aforo={aforo}, lugar_id={lugar_id or 'general'}, lat={latitud}, lon={longitud}")
         
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
-                f"{API_PRINCIPAL_URL}/reportes/",
+                url,
+                headers={'Content-Type': 'application/json'},
                 json=payload
             )
             
             if response.status_code == 200:
-                logger.info(f"✅ Datos enviados a API principal: {API_PRINCIPAL_URL}")
+                logger.info(f"✅ Datos enviados exitosamente a API principal")
+                logger.info(f"📥 Respuesta: {response.json()}")
                 return True
             else:
-                logger.error(f"❌ Error enviando a API principal: {response.status_code} - {response.text}")
+                logger.error(f"❌ Error enviando a API principal: {response.status_code}")
+                logger.error(f"📄 Respuesta completa: {response.text}")
+                logger.error(f"🔗 URL intentada: {url}")
                 return False
                 
+    except httpx.ConnectError as e:
+        logger.error(f"❌ Error de conexión con API principal: {e}")
+        logger.error(f"🔗 URL: {API_PRINCIPAL_URL}")
+        return False
+    except httpx.TimeoutException as e:
+        logger.error(f"❌ Timeout conectando con API principal: {e}")
+        return False
     except Exception as e:
-        logger.error(f"❌ Error conectando con API principal: {e}")
+        logger.error(f"❌ Error inesperado conectando con API principal: {e}")
+        logger.error(f"🔍 Tipo de error: {type(e).__name__}")
         return False
 
 # --- Endpoints ---
@@ -386,6 +404,32 @@ async def obtener_estadisticas():
         modelo_nombre=MODELO_YOLO
     )
 
+@app.post("/debug/recibir")
+async def debug_recibir(request: dict):
+    """
+    Endpoint de debug: muestra exactamente qué está recibiendo el servidor
+    """
+    logger.info("=" * 60)
+    logger.info("📥 DEBUG - Datos recibidos del ESP32:")
+    logger.info(f"Tipo de request: {type(request)}")
+    logger.info(f"Keys en request: {request.keys() if isinstance(request, dict) else 'No es dict'}")
+    
+    for key, value in request.items():
+        if key == "foto_base64":
+            logger.info(f"  - {key}: {type(value)} | Longitud: {len(value) if value else 'NULL'} | Primeros 50 chars: {str(value)[:50] if value else 'NULL'}")
+        else:
+            logger.info(f"  - {key}: {value}")
+    
+    logger.info("=" * 60)
+    
+    return {
+        "recibido": True,
+        "keys": list(request.keys()),
+        "foto_base64_type": type(request.get("foto_base64")).__name__,
+        "foto_base64_is_null": request.get("foto_base64") is None,
+        "foto_base64_length": len(request.get("foto_base64", "")) if request.get("foto_base64") else 0
+    }
+
 @app.post("/procesar-imagen", response_model=ImagenESP32Response)
 async def procesar_imagen_esp32(
     request: ImagenESP32Request,
@@ -397,6 +441,9 @@ async def procesar_imagen_esp32(
     inicio = datetime.now()
     
     try:
+        # Log de debug
+        logger.info(f"📥 Recibido - foto_base64 length: {len(request.foto_base64) if request.foto_base64 else 0}")
+        
         # Validar que el modelo esté cargado
         if modelo_yolo is None:
             raise HTTPException(
@@ -408,8 +455,8 @@ async def procesar_imagen_esp32(
         if not request.foto_base64:
             raise HTTPException(status_code=400, detail="foto_base64 es requerida")
         
-        # Timestamp por defecto
-        timestamp = request.timestamp or datetime.now().isoformat()
+        # Timestamp por defecto en zona horaria de Bogotá (UTC-5)
+        timestamp = request.timestamp or datetime.now(ZoneInfo("America/Bogota")).isoformat()
         
         logger.info(f"📥 Nueva imagen recibida. Timestamp: {timestamp}")
         
@@ -435,8 +482,7 @@ async def procesar_imagen_esp32(
             aforo=aforo,
             latitud=request.latitud,
             longitud=request.longitud,
-            descripcion=request.descripcion,
-            tipo_reporte=request.tipo_reporte or "aforo"
+            lugar_id=request.lugar_id
         )
         
         tiempo_total = (datetime.now() - inicio).total_seconds() * 1000

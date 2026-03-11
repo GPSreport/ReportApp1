@@ -1,0 +1,124 @@
+# ========================================
+# Variables de entorno y credenciales
+# ========================================
+.env
+.env.local
+.env.production
+.env.*.local
+*.env
+
+# ========================================
+# Python
+# ========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# ========================================
+# Entornos virtuales
+# ========================================
+venv/
+.venv/
+env/
+ENV/
+.env/
+virtualenv/
+
+# ========================================
+# Datos de usuarios y archivos subidos
+# ========================================
+imagenes_reportes/
+temp_procesadas/
+uploads/
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+
+# ========================================
+# Modelos de Machine Learning
+# ========================================
+*.pt
+*.pth
+*.onnx
+*.h5
+*.pkl
+yolov8*.pt
+
+# ========================================
+# Logs y archivos temporales
+# ========================================
+*.log
+logs/
+*.tmp
+*.temp
+*.cache
+
+# ========================================
+# Base de datos local
+# ========================================
+*.db
+*.sqlite
+*.sqlite3
+
+# ========================================
+# IDE y editores
+# ========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+
+# ========================================
+# Sistema operativo
+# ========================================
+.DS_Store
+Thumbs.db
+desktop.ini
+*.lnk
+
+# ========================================
+# Archivos de test y debug
+# ========================================
+.coverage
+htmlcov/
+.tox/
+.pytest_cache/
+.mypy_cache/
+
+# ========================================
+# Archivos específicos del proyecto
+# ========================================
+# Configuración local de base de datos
+local.properties
+
+# Archivos de configuración con secretos
+config.local.py
+secrets.py
+credentials.py
+
+# Backups de base de datos
+*.sql.bak
+*.sql.backup

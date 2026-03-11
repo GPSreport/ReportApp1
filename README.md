@@ -308,13 +308,4 @@ uvicorn mainIMG:app --host 0.0.0.0 --port 8000
 
 ---
 
-## 📚 Documentación Adicional
-
-- [ARQUITECTURA_PROCESAMIENTO.md](./ARQUITECTURA_PROCESAMIENTO.md) - Detalles de arquitectura
-- [AWS_SES_SETUP.md](./AWS_SES_SETUP.md) - Configuración de emails
-- [DOCUMENTACION_AFORO.md](./DOCUMENTACION_AFORO.md) - Sistema de aforo
-- [EJEMPLOS_API_EVENTOS.md](./EJEMPLOS_API_EVENTOS.md) - Ejemplos de uso
-
----
-
 *Última actualización: Marzo 2026*

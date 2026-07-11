@@ -28,11 +28,11 @@ load_dotenv()
 
 # Configuración de la base de datos MySQL
 DB_CONFIG = {
-    'host': os.getenv('DB_HOST'),
+    'host': os.getenv('DB_HOST', 'localhost'),
     'port': int(os.getenv('DB_PORT', 3306)),
-    'database': os.getenv('DB_NAME'),
-    'user': os.getenv('DB_USER'),
-    'password': os.getenv('DB_PASSWORD')
+    'database': os.getenv('DB_NAME', 'gpsdb'),
+    'user': os.getenv('DB_USER', 'dbuser'),
+    'password': os.getenv('DB_PASSWORD', 'DB214user*')
 }
 
 # Configuración de AWS SES
@@ -609,16 +609,12 @@ app.mount("/imagenes_reportes", StaticFiles(directory=IMAGES_FOLDER), name="imag
 # Inicializar BD al iniciar
 @app.on_event("startup")
 async def startup_event():
-    # La inicialización de BD se hace con init_db.py por separado
-    print("🚀 Servidor iniciado. Base de datos debe estar configurada con init_db.py")
-    
-    # Verificar conexión opcional
-    conn = get_db_connection()
-    if conn is None:
-        print("⚠️ Advertencia: No se pudo conectar a la base de datos. Ejecuta init_db.py primero.")
+    print("🚀 Servidor iniciado. Inicializando base de datos local MySQL...")
+
+    if init_database():
+        print("✅ Base de datos lista para usar")
     else:
-        print("✅ Conexión a base de datos verificada")
-        conn.close()
+        print("⚠️ No se pudo inicializar la base de datos. Revisa la configuración local de MySQL.")
 
 # Endpoints
 @app.get("/", response_class=HTMLResponse)

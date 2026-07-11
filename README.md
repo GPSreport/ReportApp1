@@ -285,9 +285,9 @@ Toda la información se almacena en MySQL con las imágenes guardadas en disco (
 # Base de datos
 DB_HOST=localhost
 DB_PORT=3306
-DB_NAME=reportes_gps
-DB_USER=usuario
-DB_PASSWORD=contraseña
+DB_NAME=gpsdb
+DB_USER=dbuser
+DB_PASSWORD=DB214user*
 
 # AWS SES
 AWS_REGION=us-east-1
@@ -311,6 +311,19 @@ uvicorn main:app --host 0.0.0.0 --port 5000
 # Servidor de Imágenes
 pip install -r requirements_img.txt
 uvicorn mainIMG:app --host 0.0.0.0 --port 8000
+```
+
+### MySQL local en Windows
+1. Crear la base de datos `gpsdb` si todavía no existe.
+2. Crear o reutilizar el usuario `dbuser` con permisos sobre esa base.
+3. Ejecutar `python init_db.py` para crear tablas y usuarios semilla.
+
+Ejemplo de SQL de arranque:
+```sql
+CREATE DATABASE IF NOT EXISTS gpsdb CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS 'dbuser'@'localhost' IDENTIFIED BY 'DB214user*';
+GRANT ALL PRIVILEGES ON gpsdb.* TO 'dbuser'@'localhost';
+FLUSH PRIVILEGES;
 ```
 
 ---

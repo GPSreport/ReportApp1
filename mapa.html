@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🗺️ Mapa de Reportes GPS</title>
+    <title>ReportMap</title>
     
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -14,180 +14,1021 @@
     <!-- Font Awesome para iconos -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
     <style>
+        :root {
+            --primary-gradient: linear-gradient(135deg, #74767d 0%, #5a5d66 100%);
+            --secondary-gradient: linear-gradient(135deg, #8b8d94 0%, #73767d 100%);
+            --success-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            --accent-color: #6c757d;
+            --text-dark: #2d3436;
+            --text-muted: #636e72;
+            --border-radius: 20px;
+            --shadow-light: 0 4px 20px rgba(0, 0, 0, 0.08);
+            --shadow-medium: 0 8px 25px rgba(0, 0, 0, 0.15);
+            --shadow-heavy: 0 15px 35px rgba(0, 0, 0, 0.2);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
         body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #71767c 0%, #5d6268 20%, #4a4f55 40%, #3a3f45 60%, #2d3238 80%, #1f2326 100%);
+            font-family: 'Inter', sans-serif;
             min-height: 100vh;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+        }
+
+        /* Animated background particles with gray tones */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="10" cy="10" r="1" fill="rgba(255,255,255,0.05)"/><circle cx="30" cy="20" r="0.5" fill="rgba(255,255,255,0.08)"/><circle cx="50" cy="30" r="1.2" fill="rgba(255,255,255,0.04)"/><circle cx="70" cy="15" r="0.8" fill="rgba(255,255,255,0.06)"/><circle cx="85" cy="35" r="0.6" fill="rgba(255,255,255,0.07)"/><circle cx="15" cy="50" r="1" fill="rgba(255,255,255,0.05)"/><circle cx="40" cy="60" r="0.7" fill="rgba(255,255,255,0.08)"/><circle cx="65" cy="70" r="1.1" fill="rgba(255,255,255,0.04)"/><circle cx="80" cy="80" r="0.9" fill="rgba(255,255,255,0.06)"/><circle cx="25" cy="85" r="0.4" fill="rgba(255,255,255,0.07)"/></svg>') repeat;
+            animation: float 25s ease-in-out infinite;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-15px) rotate(180deg); }
         }
         
-        .container-fluid {
-            padding: 20px;
+        /* Header section */
+        .header-section {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 15px;
+            margin: 15px;
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow-light);
+            position: relative;
+            overflow: hidden;
         }
-        
+
+        .header-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(45deg, rgba(255,255,255,0.15) 0%, transparent 100%);
+            pointer-events: none;
+        }
+
         .main-title {
             color: white;
             text-align: center;
-            margin-bottom: 30px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            margin: 0;
+            font-weight: 700;
+            font-size: 2rem;
+            text-shadow: 2px 2px 10px rgba(0,0,0,0.3);
+            position: relative;
+            z-index: 2;
+        }
+
+        .main-subtitle {
+            color: rgba(255, 255, 255, 0.8);
+            text-align: center;
+            margin-top: 5px;
+            font-weight: 300;
+            font-size: 1rem;
+        }
+
+        .container-fluid {
+            padding: 0;
+            max-width: 100vw;
+        }
+
+        .main-content {
+            padding: 0 20px 20px 20px;
+        }
+        
+        /* Map container with glassmorphism */
+        .map-container {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: var(--border-radius);
+            padding: 20px;
+            box-shadow: var(--shadow-medium);
+            position: sticky;
+            top: 15px;
+            overflow: hidden;
+            margin-left: 15px; /* Espaciado desde el sidebar */
+            height: calc(100vh - 140px); /* Altura ajustada descontando header y márgenes */
+        }
+
+        .map-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, rgba(255,255,255,0.15) 0%, transparent 100%);
+            pointer-events: none;
         }
         
         #map {
-            height: 70vh;
+            height: 100%;
+            min-height: 400px;
             border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-            border: 3px solid rgba(255,255,255,0.2);
+            box-shadow: var(--shadow-heavy);
+            border: 2px solid rgba(255,255,255,0.4);
             width: 100%;
+            position: relative;
+            z-index: 2;
+            overflow: hidden;
         }
 
+        /* Responsive design */
         @media (max-width: 768px) {
+            .main-title {
+                font-size: 2rem;
+            }
+            
+            .main-subtitle {
+                font-size: 1rem;
+            }
+            
             #map {
-                height: 50vh;
+                height: 60vh;
+                min-height: 400px;
                 margin-bottom: 20px;
             }
             
-            .container-fluid {
-                padding: 10px;
+            .main-content {
+                padding: 0 10px 20px 10px;
             }
 
-            .stats-card, .photo-container {
-                margin: 10px 5px;
+            .header-section {
+                margin: 10px;
+                padding: 12px;
             }
 
-            .main-title {
-                font-size: 1.5em;
-                margin-bottom: 15px;
+            .stats-card, .photo-container, .places-container, .filters-container {
+                margin: 15px 0;
+            }
+
+            .sidebar-section {
+                margin-bottom: 20px;
+                order: 2; /* En móviles, las estadísticas van después del mapa */
+            }
+
+            .col-lg-8 {
+                order: 1; /* En móviles, el mapa va primero */
+            }
+
+            .floating-btn {
+                width: 55px !important;
+                height: 55px !important;
+                font-size: 1.2em !important;
+            }
+
+            /* Remover márgenes y posición sticky en móviles */
+            .map-container {
+                margin-left: 0;
+                position: relative;
+                height: auto;
+            }
+
+            .sidebar-section {
+                padding-right: 0;
+            }
+
+            .stats-number {
+                font-size: 1.5rem;
+            }
+
+            .stats-label {
+                font-size: 0.75rem;
             }
         }
         
+        /* Sidebar section con mejor espaciado para la nueva posición */
+        .sidebar-section {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            padding-right: 15px; /* Espaciado hacia el mapa */
+        }
+
         .stats-card {
             background: rgba(255,255,255,0.95);
-            backdrop-filter: blur(10px);
-            border-radius: 15px;
-            padding: 20px;
-            margin: 10px 0;
-            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+            backdrop-filter: blur(20px);
+            border-radius: var(--border-radius);
+            padding: 15px;
+            box-shadow: var(--shadow-medium);
             border: 1px solid rgba(255,255,255,0.3);
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .stats-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+        }
+
+        .stats-card:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-heavy);
+        }
+
+        .stats-card h4 {
+            color: var(--text-dark);
+            font-weight: 600;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .stats-number {
+            font-size: 1.8rem;
+            font-weight: 700;
+            background: var(--primary-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 3px;
+            text-align: center;
+        }
+
+        .stats-label {
+            color: var(--text-muted);
+            font-weight: 500;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .last-report-section {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(0,0,0,0.1);
+        }
+
+        .last-report-section strong {
+            color: var(--accent-color);
+            font-weight: 600;
+        }
+
+        .last-report-time {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            margin-top: 3px;
+            padding: 6px 10px;
+            background: rgba(108, 92, 231, 0.1);
+            border-radius: 8px;
+            border-left: 3px solid var(--accent-color);
         }
         
         .photo-container {
+            background: rgba(255,255,255,0.95);
+            backdrop-filter: blur(20px);
+            border-radius: var(--border-radius);
+            padding: 25px;
+            box-shadow: var(--shadow-medium);
+            border: 1px solid rgba(255,255,255,0.3);
+            position: relative;
+            overflow: hidden;
+            max-height: 500px;
+        }
+
+        .photo-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(135deg, #8b8d94 0%, #73767d 100%);
+        }
+
+        .photo-container h5 {
+            color: var(--text-dark);
+            font-weight: 600;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .photos-grid {
             max-height: 400px;
             overflow-y: auto;
-            background: rgba(255,255,255,0.95);
-            border-radius: 15px;
-            padding: 20px;
-            margin-top: 20px;
-            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+            padding-right: 5px;
         }
-        
+
+        /* Custom scrollbar */
+        .photos-grid::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .photos-grid::-webkit-scrollbar-track {
+            background: rgba(0,0,0,0.1);
+            border-radius: 3px;
+        }
+
+        .photos-grid::-webkit-scrollbar-thumb {
+            background: var(--accent-color);
+            border-radius: 3px;
+        }
+
         .photo-item {
-            margin-bottom: 15px;
-            padding: 10px;
-            border: 2px solid #e9ecef;
-            border-radius: 10px;
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid rgba(0,0,0,0.1);
+            border-radius: 15px;
             background: white;
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .photo-item::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(45deg, rgba(108, 117, 125, 0.05), rgba(90, 93, 102, 0.05));
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
         }
         
         .photo-item:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            transform: translateY(-8px) scale(1.02);
+            box-shadow: var(--shadow-heavy);
+            border-color: var(--accent-color);
+        }
+
+        .photo-item:hover::before {
+            opacity: 1;
         }
         
         .photo-item img {
-            max-width: 100%;
-            max-height: 200px;
+            width: 100%;
+            height: 150px;
             object-fit: cover;
-            border-radius: 8px;
+            border-radius: 10px;
             cursor: pointer;
+            transition: transform 0.3s ease;
+        }
+
+        .photo-item:hover img {
+            transform: scale(1.05);
+        }
+
+        .photo-item-info {
+            margin-top: 10px;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        /* Places of Interest container */
+        .places-container {
+            background: rgba(255,255,255,0.95);
+            backdrop-filter: blur(20px);
+            border-radius: var(--border-radius);
+            padding: 25px;
+            box-shadow: var(--shadow-medium);
+            border: 1px solid rgba(255,255,255,0.3);
+            position: relative;
+            overflow: hidden;
+            max-height: 500px;
+        }
+
+        .places-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+        }
+
+        .places-container h5 {
+            color: var(--text-dark);
+            font-weight: 600;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .places-content {
+            max-height: 400px;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+
+        /* Mismo scrollbar que photos-grid */
+        .places-content::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .places-content::-webkit-scrollbar-track {
+            background: rgba(0,0,0,0.1);
+            border-radius: 3px;
+        }
+
+        .places-content::-webkit-scrollbar-thumb {
+            background: #17a2b8;
+            border-radius: 3px;
+        }
+
+        .aforo-item {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid rgba(0,0,0,0.1);
+            border-radius: 15px;
+            background: white;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .aforo-item::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(45deg, rgba(23, 162, 184, 0.05), rgba(19, 132, 150, 0.05));
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
         }
         
+        .aforo-item:hover {
+            transform: translateY(-8px) scale(1.02);
+            box-shadow: var(--shadow-heavy);
+            border-color: #17a2b8;
+        }
+
+        .aforo-item:hover::before {
+            opacity: 1;
+        }
+        
+        .aforo-item img {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: transform 0.3s ease;
+        }
+
+        .aforo-item:hover img {
+            transform: scale(1.05);
+        }
+
+        .aforo-item-info {
+            margin-top: 10px;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .aforo-stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(0,0,0,0.1);
+        }
+
+        .aforo-stat {
+            text-align: center;
+            padding: 8px;
+            background: rgba(23, 162, 184, 0.1);
+            border-radius: 8px;
+        }
+
+        .aforo-stat-number {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #17a2b8;
+        }
+
+        .aforo-stat-label {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-top: 2px;
+        }
+
+        .places-loading {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-muted);
+        }
+
+        .places-empty {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-muted);
+        }
+
+        .places-empty i {
+            font-size: 2.5rem;
+            color: #17a2b8;
+            margin-bottom: 15px;
+            opacity: 0.5;
+        }
+
+        /* Filters container */
+        .filters-container {
+            padding: 15px 0;
+            margin-bottom: 20px;
+        }
+
+        .filters-container h5 {
+            color: white;
+            font-weight: 600;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1.1rem;
+        }
+
+        .filters-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: flex-start;
+        }
+
+        .filter-pill {
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 25px;
+            padding: 8px 16px;
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 0.8rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+            min-width: fit-content;
+        }
+
+        .filter-pill:hover {
+            background: rgba(255, 255, 255, 0.3);
+            border-color: rgba(255, 255, 255, 0.5);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .filter-pill.active {
+            background: rgba(108, 117, 125, 0.9);
+            border-color: #6c757d;
+            color: white;
+            box-shadow: 0 4px 15px rgba(108, 117, 125, 0.4);
+        }
+
+        .filter-pill.active:hover {
+            background: rgba(108, 117, 125, 1);
+            transform: translateY(-2px);
+        }
+
+        .filter-pill i {
+            font-size: 0.8rem;
+        }
+
+        /* Colores específicos para cada filtro */
+        .filter-pill[data-filter="todos"] i {
+            color: rgba(255, 255, 255, 0.9);
+        }
+        .filter-pill[data-filter="todos"].active i {
+            color: white;
+        }
+
+        .filter-pill[data-filter="Daños en Planta Urbanisticas"] i {
+            color: #dc3545; /* Rojo */
+        }
+        .filter-pill[data-filter="Daños en Planta Urbanisticas"].active i {
+            color: white;
+        }
+
+        .filter-pill[data-filter="Eventos Culturales"] i {
+            color: #9b59b6; /* Púrpura */
+        }
+        .filter-pill[data-filter="Eventos Culturales"].active i {
+            color: white;
+        }
+
+        .filter-pill[data-filter="Eventos Deportivos"] i {
+            color: #28a745; /* Verde */
+        }
+        .filter-pill[data-filter="Eventos Deportivos"].active i {
+            color: white;
+        }
+
+        .filter-pill[data-filter="Obras en Proceso"] i {
+            color: #fd7e14; /* Naranja */
+        }
+        .filter-pill[data-filter="Obras en Proceso"].active i {
+            color: white;
+        }
+
+        .filter-pill[data-filter="lugares_interes"] i {
+            color: #17a2b8; /* Cian */
+        }
+        .filter-pill[data-filter="lugares_interes"].active i {
+            color: white;
+        }
+
+        /* Estilos para marcadores personalizados */
+        .custom-marker-icon {
+            background: none;
+            border: none;
+        }
+
+        /* Responsive filters */
+        @media (max-width: 768px) {
+            .filters-grid {
+                justify-content: center;
+                flex-wrap: wrap;
+            }
+            
+            .filter-pill {
+                font-size: 0.75rem;
+                padding: 6px 10px;
+                gap: 4px;
+            }
+        }
+        
+        /* Loading states and animations */
         .loading {
             text-align: center;
             padding: 40px;
             color: white;
             font-size: 1.2em;
         }
-        
-        .btn-refresh {
-            position: fixed;
-            bottom: 30px;
-            right: 30px;
-            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
-            border: none;
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
-            color: white;
-            font-size: 1.5em;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-            transition: transform 0.3s ease;
-            z-index: 1000;
-        }
-        
-        .btn-refresh:hover {
-            transform: scale(1.1);
-            background: linear-gradient(45deg, #ee5a24, #ff6b6b);
+
+        .loading-spinner {
+            display: inline-block;
+            animation: spin 1s linear infinite;
         }
 
-        /* Nuevo botón agregar (esquina izquierda inferior) */
-        .btn-add {
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Floating action buttons */
+        .floating-btn {
             position: fixed;
+            width: 65px;
+            height: 65px;
+            border-radius: 50%;
+            border: none;
+            color: white;
+            font-size: 1.4em;
+            box-shadow: var(--shadow-heavy);
+            transition: all 0.3s ease;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+
+        .floating-btn:hover {
+            transform: scale(1.1) translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.4);
+        }
+
+        .floating-btn:active {
+            transform: scale(0.95);
+        }
+
+        .btn-refresh {
+            bottom: 30px;
+            right: 30px;
+            background: var(--secondary-gradient);
+        }
+
+        .btn-refresh:hover {
+            background: linear-gradient(45deg, #f5576c, #f093fb);
+        }
+
+        .btn-add {
             bottom: 30px;
             left: 30px;
-            background: linear-gradient(45deg, #38b000, #2d6a4f);
-            border: none;
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
+            background: var(--success-gradient);
+        }
+
+        .btn-add:hover {
+            background: linear-gradient(45deg, #00f2fe, #4facfe);
+        }
+
+        /* Pulse animation for new markers */
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        .leaflet-marker-icon.highlight-marker {
+            animation: pulse 2s infinite;
+            transform-origin: center;
+            filter: drop-shadow(0 6px 12px rgba(102, 126, 234, 0.4));
+        }
+
+        /* Modal customization */
+        .modal-content {
+            border-radius: var(--border-radius);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            box-shadow: var(--shadow-heavy);
+            backdrop-filter: blur(20px);
+            background: rgba(255, 255, 255, 0.95);
+        }
+
+        .modal-header {
+            background: var(--primary-gradient);
             color: white;
-            font-size: 1.3em;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-            transition: transform 0.2s ease;
-            z-index: 1000;
+            border-radius: var(--border-radius) var(--border-radius) 0 0;
+            border-bottom: none;
+            padding: 20px 30px;
         }
-        .btn-add:hover { transform: scale(1.06); }
-        
-        .marker-popup {
-            max-width: 300px;
+
+        .modal-header .btn-close {
+            filter: invert(1);
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            padding: 8px;
+            transition: all 0.3s ease;
         }
-        
-        .marker-popup img {
+
+        .modal-header .btn-close:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: scale(1.1);
+        }
+
+        .modal-header .modal-title {
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .modal-body {
+            padding: 30px;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .modal-footer {
+            border-top: 1px solid rgba(0,0,0,0.1);
+            padding: 20px 30px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 0 0 var(--border-radius) var(--border-radius);
+        }
+
+        /* Modal image styling */
+        .modal-image-container {
+            position: relative;
+            display: inline-block;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            transition: transform 0.3s ease;
             max-width: 100%;
-            max-height: 150px;
-            object-fit: cover;
-            border-radius: 8px;
-            margin-top: 10px;
+            width: auto;
         }
-        
-        .stats-number {
-            font-size: 2em;
-            font-weight: bold;
-            color: #667eea;
+
+        .modal-image-container:hover {
+            transform: scale(1.01);
         }
-        
-        .error-message, .success-message {
-            padding: 15px;
+
+        .modal-image-container img {
+            display: block;
+            max-height: 85vh;
+            max-width: 100%;
+            border-radius: 15px;
+            min-height: 300px;
+            object-fit: contain;
+        }
+
+        /* Modal info styling */
+        .modal-report-info {
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 15px;
+            padding: 20px;
+            margin-top: 20px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+        }
+
+        .modal-info-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+        }
+
+        .modal-info-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+        }
+
+        .modal-info-icon {
+            width: 20px;
+            margin-right: 12px;
+            color: var(--accent-color);
+            font-weight: 600;
+        }
+
+        .modal-info-label {
+            font-weight: 600;
+            color: var(--text-dark);
+            margin-right: 8px;
+            min-width: 80px;
+        }
+
+        .modal-info-value {
+            color: var(--text-muted);
+            flex: 1;
+        }
+
+        /* Modal animations */
+        .modal.fade .modal-dialog {
+            transition: transform 0.4s ease-out, opacity 0.4s ease-out;
+            transform: scale(0.9) translateY(-50px);
+        }
+
+        .modal.show .modal-dialog {
+            transform: scale(1) translateY(0);
+        }
+
+        /* Modal backdrop customization */
+        .modal-backdrop {
+            background-color: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(5px);
+        }
+
+        /* Fullscreen modal adjustments */
+        @media (min-width: 1200px) {
+            .modal-xl {
+                max-width: 90%;
+            }
+            
+            .modal-image-container img {
+                max-height: 80vh;
+                max-width: 90vw;
+            }
+        }
+
+        /* Responsive modal adjustments */
+        @media (max-width: 768px) {
+            .modal-dialog {
+                margin: 10px;
+            }
+            
+            .modal-body {
+                padding: 20px;
+            }
+            
+            .modal-header {
+                padding: 15px 20px;
+            }
+            
+            .modal-footer {
+                padding: 15px 20px;
+            }
+            
+            .modal-info-item {
+                flex-direction: column;
+                align-items: flex-start;
+                text-align: left;
+            }
+            
+            .modal-info-label {
+                min-width: auto;
+                margin-bottom: 4px;
+            }
+            
+            .modal-image-container img {
+                max-height: 60vh;
+                min-height: 200px;
+            }
+            
+            .modal-xl {
+                max-width: 95%;
+            }
+        }
+
+        /* Form styling */
+        .form-label {
+            font-weight: 600;
+            color: var(--text-dark);
+            margin-bottom: 8px;
+        }
+
+        .form-control, .form-select {
             border-radius: 10px;
+            border: 2px solid rgba(0,0,0,0.1);
+            padding: 12px 15px;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+
+        .form-control:focus, .form-select:focus {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 0.2rem rgba(108, 92, 231, 0.25);
+        }
+
+        /* Button styling */
+        .btn {
+            border-radius: 10px;
+            font-weight: 600;
+            padding: 10px 20px;
+            transition: all 0.3s ease;
+            border: none;
+        }
+
+        .btn-primary {
+            background: var(--primary-gradient);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+            transform: translateY(-2px);
+        }
+
+        .btn-outline-primary {
+            border: 2px solid var(--accent-color);
+            color: var(--accent-color);
+            background: transparent;
+        }
+
+        .btn-outline-primary:hover {
+            background: var(--accent-color);
+            color: white;
+            transform: translateY(-2px);
+        }
+
+        /* Message styling */
+        .error-message, .success-message {
+            padding: 15px 25px;
+            border-radius: 15px;
             margin: 10px 0;
             text-align: center;
-            animation: slideDown 0.3s ease-out;
+            animation: slideDown 0.4s ease-out;
             position: fixed;
             top: 20px;
             left: 50%;
             transform: translateX(-50%);
             z-index: 2000;
             max-width: 90%;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            box-shadow: var(--shadow-medium);
+            font-weight: 500;
+            border: none;
         }
 
         .error-message {
-            background: rgba(220, 53, 69, 0.95);
+            background: linear-gradient(135deg, #ff6b6b, #ee5a24);
             color: white;
         }
 
         .success-message {
-            background: rgba(40, 167, 69, 0.95);
+            background: linear-gradient(135deg, #00b894, #00cec9);
             color: white;
         }
 
@@ -201,110 +1042,519 @@
                 opacity: 1;
             }
         }
-        
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-            100% { transform: scale(1); }
-        }
-        
-        .loading-spinner {
-            animation: pulse 2s infinite;
+
+        /* Marker popup customization */
+        .marker-popup {
+            max-width: 320px;
+            font-family: 'Inter', sans-serif;
         }
 
-        /* Resalte para marcadores recientes */
-        .leaflet-marker-icon.highlight-marker {
-            animation: pulse 1.6s infinite;
-            transform-origin: center;
-            filter: drop-shadow(0 6px 8px rgba(0,0,0,0.25));
+        .marker-popup h6 {
+            color: var(--accent-color);
+            font-weight: 600;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid rgba(108, 92, 231, 0.2);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .marker-popup p {
+            margin-bottom: 8px;
+            color: var(--text-dark);
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .marker-popup strong {
+            color: var(--accent-color);
+            font-weight: 600;
+        }
+        
+        .marker-popup img {
+            max-width: 100%;
+            max-height: 150px;
+            object-fit: cover;
+            border-radius: 10px;
+            margin: 10px auto 0 auto;
+            display: block;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .marker-popup img:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+            cursor: pointer;
+        }
+
+        /* Contenedor de imagen centrado en popup */
+        .popup-image-container {
+            text-align: center;
+            margin-top: 10px;
+        }
+
+        /* Estilo para el contenido del popup */
+        .popup-content {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 15px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .popup-type-badge {
+            background: var(--primary-gradient);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            display: inline-block;
+            margin-bottom: 10px;
+        }
+
+        /* Utility classes */
+        .text-gradient {
+            background: var(--primary-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        /* Indicador de última actualización */
+        .last-update-indicator {
+            position: absolute;
+            bottom: 15px;
+            right: 15px;
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            padding: 8px 15px;
+            border-radius: 25px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: var(--shadow-light);
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .last-update-indicator:hover {
+            background: rgba(255, 255, 255, 0.95);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-medium);
+        }
+
+        .last-update-indicator i {
+            color: var(--accent-color);
+            animation: rotate 2s linear infinite;
+        }
+
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .last-update-indicator strong {
+            color: var(--text-dark);
+            font-weight: 600;
+        }
+
+        /* Animación para mostrar actualización en progreso */
+        .updating .last-update-indicator i {
+            animation: rotate 1s linear infinite;
+        }
+
+        /* Botón de historial de aforo */
+        .btn-historial {
+            width: 100%;
+            margin-top: 15px;
+            background: var(--primary-gradient);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(108, 92, 231, 0.3);
+        }
+
+        .btn-historial:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(108, 92, 231, 0.4);
+        }
+
+        /* Tabla de historial */
+        .historial-table-container {
+            max-height: 500px;
+            overflow-y: auto;
+            margin-top: 20px;
+            border-radius: 8px;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+        }
+
+        .historial-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .historial-table thead {
+            position: sticky;
+            top: 0;
+            background: var(--primary-gradient);
+            color: white;
+            z-index: 10;
+        }
+
+        .historial-table thead th {
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .historial-table tbody tr {
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+            transition: background-color 0.2s ease;
+        }
+
+        .historial-table tbody tr:hover {
+            background-color: rgba(108, 92, 231, 0.05);
+        }
+
+        .historial-table tbody td {
+            padding: 12px 15px;
+            color: var(--text-dark);
+        }
+
+        .historial-table tbody td:first-child {
+            font-weight: 500;
+        }
+
+        .historial-table tbody td:last-child {
+            text-align: center;
+            font-weight: 600;
+            color: var(--accent-color);
+        }
+
+        .aforo-badge {
+            background: var(--primary-gradient);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* Colores dinámicos para el aforo según nivel de ocupación */
+        .aforo-stat-number.low {
+            color: #10b981; /* Verde - Ocupación baja */
+        }
+
+        .aforo-stat-number.medium {
+            color: #f59e0b; /* Amarillo - Ocupación media */
+        }
+
+        .aforo-stat-number.high {
+            color: #ef4444; /* Rojo - Ocupación alta */
+        }
+
+        .aforo-stat-number.full {
+            color: #dc2626; /* Rojo oscuro - Capacidad máxima */
+            animation: pulse-alert 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse-alert {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        /* Indicador de capacidad */
+        .capacity-indicator {
+            margin-top: 8px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .capacity-bar {
+            flex: 1;
+            height: 6px;
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .capacity-fill {
+            height: 100%;
+            transition: width 0.3s ease, background-color 0.3s ease;
+            border-radius: 3px;
+        }
+
+        .capacity-fill.low {
+            background: linear-gradient(90deg, #10b981, #34d399);
+        }
+
+        .capacity-fill.medium {
+            background: linear-gradient(90deg, #f59e0b, #fbbf24);
+        }
+
+        .capacity-fill.high {
+            background: linear-gradient(90deg, #ef4444, #f87171);
+        }
+
+        .capacity-fill.full {
+            background: linear-gradient(90deg, #dc2626, #ef4444);
+        }
+
+        /* Filtro de intervalo */
+        .interval-filter {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .interval-option {
+            flex: 1;
+            min-width: 120px;
+            padding: 10px 15px;
+            background: rgba(255, 255, 255, 0.9);
+            border: 2px solid rgba(108, 92, 231, 0.2);
+            border-radius: 8px;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+
+        .interval-option:hover {
+            border-color: var(--accent-color);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(108, 92, 231, 0.2);
+        }
+
+        .interval-option.active {
+            background: var(--primary-gradient);
+            color: white;
+            border-color: transparent;
+        }
+
+        .empty-historial {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-muted);
+        }
+
+        .empty-historial i {
+            font-size: 3rem;
+            margin-bottom: 15px;
+            opacity: 0.5;
         }
     </style>
 </head>
 <body>
     <div class="container-fluid">
-        <h1 class="main-title">
-            <i class="fas fa-map-marked-alt"></i>
-            Mapa de Reportes GPS
-        </h1>
+        <!-- Header Section -->
+        <div class="header-section">
+            <h1 class="main-title">
+                <i class="fas fa-map-pin"></i>
+                ReportMap
+            </h1>
+            <p class="main-subtitle">
+                <i class="fas fa-satellite-dish"></i>
+                Sistema de monitoreo y reporte en tiempo real
+            </p>
+        </div>
         
-        <div class="row">
-            <!-- Columna del mapa -->
-            <div class="col-lg-8">
-                <div id="map"></div>
-            </div>
-            
-            <!-- Columna de estadísticas y fotos -->
-            <div class="col-lg-4">
-                <!-- Estadísticas -->
-                <div class="stats-card">
-                    <h4><i class="fas fa-chart-bar text-primary"></i> Estadísticas</h4>
-                    <div class="row text-center">
-                        <div class="col-6">
-                            <div class="stats-number" id="totalReportes">0</div>
-                            <small class="text-muted">Total Reportes</small>
+        <div class="main-content">
+            <div class="row">
+                <!-- Columna de estadísticas y fotos (ahora a la izquierda) -->
+                <div class="col-lg-4">
+                    <div class="sidebar-section">
+                        <!-- Filtros -->
+                        <div class="filters-container">
+                            <h5><i class="fas fa-filter"></i> Filtros</h5>
+                            <div class="filters-grid">
+                                <div class="filter-pill active" data-filter="todos" onclick="toggleFilter(this, 'todos')">
+                                    <i class="fas fa-globe"></i>
+                                    Todos
+                                </div>
+                                <div class="filter-pill" data-filter="Daños en Planta Urbanisticas" onclick="toggleFilter(this, 'Daños en Planta Urbanisticas')">
+                                    <i class="fas fa-triangle-exclamation"></i>
+                                    Daños Urbanísticos
+                                </div>
+                                <div class="filter-pill" data-filter="Eventos Culturales" onclick="toggleFilter(this, 'Eventos Culturales')">
+                                    <i class="fas fa-masks-theater"></i>
+                                    Eventos Culturales
+                                </div>
+                                <div class="filter-pill" data-filter="Eventos Deportivos" onclick="toggleFilter(this, 'Eventos Deportivos')">
+                                    <i class="fas fa-futbol"></i>
+                                    Eventos Deportivos
+                                </div>
+                                <div class="filter-pill" data-filter="Obras en Proceso" onclick="toggleFilter(this, 'Obras en Proceso')">
+                                    <i class="fas fa-hard-hat"></i>
+                                    Obras en Proceso
+                                </div>
+                                <div class="filter-pill" data-filter="lugares_interes" onclick="toggleFilter(this, 'lugares_interes')">
+                                    <i class="fas fa-map-pin"></i>
+                                    Lugares de Interés
+                                </div>
+                            </div>
                         </div>
-                        <div class="col-6">
-                            <div class="stats-number" id="reportesHoy">0</div>
-                            <small class="text-muted">Hoy</small>
+                        
+                        <!-- Lugares de Interés -->
+                        <div class="places-container">
+                            <h5><i class="fas fa-map-marked-alt"></i> Lugares de Interés</h5>
+                            <div class="places-content" id="aforoContainer">
+                                <div class="places-loading">
+                                    <i class="fas fa-spinner loading-spinner"></i>
+                                    <p>Cargando datos...</p>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                    <div class="mt-3">
-                        <strong>Último reporte:</strong>
-                        <div id="ultimoReporte" class="text-muted">Cargando...</div>
+                        
+                        <!-- Estadísticas -->
+                        <div class="stats-card">
+                            <h4><i class="fas fa-chart-bar"></i> Resumen de Actividad</h4>
+                            <div class="row text-center mb-3">
+                                <div class="col-4">
+                                    <div class="stats-number" id="reportesHoy">0</div>
+                                    <div class="stats-label">Hoy</div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="stats-number" id="reportesSemana">0</div>
+                                    <div class="stats-label">Esta Semana</div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="stats-number" id="totalReportes">0</div>
+                                    <div class="stats-label">Total</div>
+                                </div>
+                            </div>
+                            <div class="last-report-section">
+                                <strong><i class="fas fa-clock"></i> Último reporte:</strong>
+                                <div id="ultimoReporte" class="last-report-time">Cargando...</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Fotos de reportes -->
+                        <div class="photo-container">
+                            <h5><i class="fas fa-camera"></i> Últimos Reportes</h5>
+                            <div class="photos-grid" id="photosContainer">
+                                <div class="loading loading-spinner">
+                                    <i class="fas fa-spinner fa-spin"></i>
+                                    Cargando galería...
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 
-                <!-- Fotos de reportes -->
-                <div class="photo-container">
-                    <h5><i class="fas fa-camera text-primary"></i> Fotos Recientes</h5>
-                    <div id="photosContainer">
-                        <div class="loading loading-spinner">
-                            <i class="fas fa-spinner fa-spin"></i>
-                            Cargando fotos...
-                        </div>
+                <!-- Columna del mapa -->
+                <div class="col-lg-8">
+                    <div class="map-container">
+                        <div id="map"></div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
     
-    <!-- Botón de actualizar -->
-    <button class="btn btn-refresh" onclick="cargarReportes()" title="Actualizar datos">
+    <!-- Botones flotantes -->
+    <button class="floating-btn btn-refresh" onclick="cargarReportes(true)" title="Actualizar datos">
         <i class="fas fa-sync-alt"></i>
     </button>
 
-    <!-- Nuevo: Botón para agregar reporte -->
-    <button class="btn btn-add" onclick="abrirModalAgregar()" title="Agregar reporte">
+    <button class="floating-btn btn-add" onclick="abrirModalAgregar()" title="Agregar reporte">
         <i class="fas fa-plus"></i>
     </button>
 
     <!-- Modal para ver fotos en grande -->
     <div class="modal fade" id="photoModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
+        <div class="modal-dialog modal-xl">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Foto del Reporte</h5>
+                    <h5 class="modal-title"><i class="fas fa-image"></i> Detalles del Reporte</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body text-center">
-                    <img id="modalImage" src="" class="img-fluid" style="max-height: 70vh;">
-                    <div id="modalInfo" class="mt-3"></div>
+                    <div class="modal-image-container">
+                        <img id="modalImage" src="" class="img-fluid">
+                    </div>
+                    <div id="modalInfo" class="modal-report-info"></div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Nuevo: Modal para agregar reporte -->
+    <!-- Modal para historial de aforo -->
+    <div class="modal fade" id="historialModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-history"></i> Historial de Aforo</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Filtro de intervalo -->
+                    <div class="interval-filter">
+                        <div class="interval-option active" data-interval="1" onclick="seleccionarIntervalo(this, 1)">
+                            <i class="fas fa-clock"></i> Última hora
+                        </div>
+                        <div class="interval-option" data-interval="24" onclick="seleccionarIntervalo(this, 24)">
+                            <i class="fas fa-calendar-day"></i> Últimas 24 horas
+                        </div>
+                        <div class="interval-option" data-interval="168" onclick="seleccionarIntervalo(this, 168)">
+                            <i class="fas fa-calendar-week"></i> Última semana
+                        </div>
+                        <div class="interval-option" data-interval="720" onclick="seleccionarIntervalo(this, 720)">
+                            <i class="fas fa-calendar-alt"></i> Último mes
+                        </div>
+                    </div>
+                    
+                    <!-- Tabla de historial -->
+                    <div id="historialTableContainer" class="historial-table-container">
+                        <div class="text-center py-4">
+                            <i class="fas fa-spinner fa-spin" style="font-size: 2rem;"></i>
+                            <p class="mt-2">Cargando historial...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para agregar reporte -->
     <div class="modal fade" id="addReportModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Agregar nuevo reporte</h5>
+                    <h5 class="modal-title"><i class="fas fa-plus-circle"></i> Crear Nuevo Reporte</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
                 </div>
                 <div class="modal-body">
-                    <div class="mb-2">
-                        <label class="form-label">Tipo de reporte</label>
+                    <div class="mb-3">
+                        <label class="form-label"><i class="fas fa-tag"></i> Tipo de reporte</label>
                         <select id="inputTipo" class="form-select">
                             <option value="otro">Otro</option>
                             <option value="incidente">Incidente</option>
@@ -312,29 +1562,38 @@
                             <option value="alerta">Alerta</option>
                         </select>
                     </div>
-                    <div class="mb-2">
-                        <label class="form-label">Descripción</label>
-                        <textarea id="inputDescripcion" class="form-control" rows="3"></textarea>
+                    <div class="mb-3">
+                        <label class="form-label"><i class="fas fa-edit"></i> Descripción</label>
+                        <textarea id="inputDescripcion" class="form-control" rows="3" placeholder="Describe el reporte..."></textarea>
                     </div>
-                    <div class="mb-2">
-                        <label class="form-label">Coordenadas (seleccione en el mapa)</label>
-                        <div class="input-group">
+                    <div class="mb-3">
+                        <label class="form-label"><i class="fas fa-map-marker-alt"></i> Coordenadas</label>
+                        <div class="input-group mb-2">
+                            <span class="input-group-text"><i class="fas fa-crosshairs"></i></span>
                             <input id="inputLat" class="form-control" placeholder="Latitud">
                             <input id="inputLng" class="form-control" placeholder="Longitud">
                         </div>
-                        <div class="form-text">Haga clic en "Seleccionar en mapa" y luego en el mapa para fijar la ubicación.</div>
-                        <button class="btn btn-sm btn-outline-primary mt-2" onclick="activarSeleccionMapa()">Seleccionar en mapa</button>
+                        <div class="form-text mb-2">Haga clic en "Seleccionar en mapa" y luego en el mapa para fijar la ubicación.</div>
+                        <button class="btn btn-outline-primary btn-sm" onclick="activarSeleccionMapa()">
+                            <i class="fas fa-crosshairs"></i> Seleccionar en mapa
+                        </button>
                     </div>
-                    <div class="mb-2">
-                        <label class="form-label">Foto (opcional) - Formatos: JPG, PNG</label>
+                    <div class="mb-3">
+                        <label class="form-label"><i class="fas fa-camera"></i> Foto (opcional)</label>
                         <input id="inputFoto" type="file" accept="image/jpeg,image/png" class="form-control">
-                        <small class="form-text text-muted">Deje este campo vacío si no desea agregar una foto.</small>
+                        <small class="form-text text-muted">Formatos soportados: JPG, PNG. Deje vacío si no desea agregar foto.</small>
                     </div>
-                    <div id="addReportFeedback" class="text-danger small" style="display:none;"></div>
+                    <div id="addReportFeedback" class="alert alert-danger" style="display:none;" role="alert">
+                        <i class="fas fa-exclamation-triangle"></i> <span></span>
+                    </div>
                 </div>
                 <div class="modal-footer">
-                    <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button class="btn btn-primary" onclick="submitNuevoReporte()">Enviar reporte</button>
+                    <button class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times"></i> Cancelar
+                    </button>
+                    <button class="btn btn-primary" onclick="submitNuevoReporte()">
+                        <i class="fas fa-paper-plane"></i> Enviar Reporte
+                    </button>
                 </div>
             </div>
         </div>
@@ -353,6 +1612,27 @@
         let markersGroup;
         let markersById = {}; // Mapa id -> marker
         let firstLoad = true;
+        let autoUpdateInterval; // Para controlar la actualización automática
+        const AUTO_UPDATE_INTERVAL = 20000; // 20 segundos en milisegundos
+        let preserveMapView = false; // Flag para preservar vista del mapa en actualizaciones automáticas
+        let preserveViewTimeout; // Timeout para resetear preserveMapView
+
+        // Función para activar preservación de vista del mapa
+        function activarPreservacionVista() {
+            preserveMapView = true;
+            console.log('🔒 Vista del mapa bloqueada - usuario interactuando');
+            
+            // Limpiar timeout anterior si existe
+            if (preserveViewTimeout) {
+                clearTimeout(preserveViewTimeout);
+            }
+            
+            // Resetear preservación después de 5 minutos de inactividad
+            preserveViewTimeout = setTimeout(() => {
+                preserveMapView = false;
+                console.log('🔓 Vista del mapa desbloqueada - timeout de inactividad alcanzado');
+            }, 300000); // 5 minutos
+        }
 
         // Inicializar el mapa
         function initMap() {
@@ -363,8 +1643,15 @@
             }).addTo(map);
             markersGroup = L.layerGroup().addTo(map);
 
+            // Listener para detectar cuando el usuario interactúa con el mapa
+            map.on('movestart zoomstart dragstart', function() {
+                activarPreservacionVista();
+            });
+
             // Listener de clic en el mapa: si estamos en modo selección, rellenar lat/lng y colocar marcador temporal.
             map.on('click', function(e) {
+                activarPreservacionVista(); // También preservar en clics
+                
                 if (!seleccionarCoords) return;
                 const lat = e.latlng.lat;
                 const lng = e.latlng.lng;
@@ -379,7 +1666,7 @@
         }
         
         // Cargar reportes desde la API
-        async function cargarReportes() {
+        async function cargarReportes(isManualRefresh = false) {
             try {
                 showLoading(true);
                 
@@ -387,19 +1674,119 @@
                 if (!response.ok) throw new Error(`Error ${response.status}: ${response.statusText}`);
                 const reportes = await response.json();
                 
+                // Log de debugging para eventos
+                const eventos = reportes.filter(r => 
+                    r.tipo_reporte === 'Eventos Culturales' || r.tipo_reporte === 'Eventos Deportivos'
+                );
+                console.log(`📊 Total reportes cargados: ${reportes.length}`);
+                console.log(`🎭 Eventos encontrados: ${eventos.length}`);
+                if (eventos.length > 0) {
+                    console.log('📅 Datos de eventos:', eventos.map(e => ({
+                        id: e.id,
+                        tipo: e.tipo_reporte,
+                        fecha_inicio: e.fecha_inicio_evento,
+                        fecha_fin: e.fecha_fin_evento
+                    })));
+                }
+                
                 const statsResponse = await fetch(`${API_BASE_URL}/stats`);
                 const stats = statsResponse.ok ? await statsResponse.json() : null;
                 
-                actualizarMapa(reportes);
-                actualizarEstadisticas(stats, reportes);
-                actualizarFotos(reportes);
+                // Guardar todos los reportes para filtros
+                allReportes = reportes;
+                
+                // Aplicar filtro actual
+                let reportesFiltrados;
+                if (currentFilter === 'todos') {
+                    reportesFiltrados = reportes;
+                } else {
+                    reportesFiltrados = reportes.filter(reporte => 
+                        reporte.tipo_reporte === currentFilter
+                    );
+                }
+                
+                actualizarMapa(reportesFiltrados, isManualRefresh);
+                actualizarEstadisticas(stats, reportes); // Stats siempre con todos los reportes
+                actualizarFotos(reportes); // Fotos siempre con todos los reportes
+                cargarDatosAforo(); // Cargar datos de aforo
                 
                 showError(null);
+                updateLastRefreshTime(); // Actualizar tiempo de última actualización
             } catch (error) {
                 console.error('Error al cargar reportes:', error);
                 showError(`Error al cargar datos: ${error.message}`);
             } finally {
                 showLoading(false);
+            }
+        }
+
+        // Función para iniciar la actualización automática
+        function iniciarActualizacionAutomatica() {
+            // Limpiar cualquier intervalo previo
+            if (autoUpdateInterval) {
+                clearInterval(autoUpdateInterval);
+            }
+            
+            // Iniciar nuevo intervalo
+            autoUpdateInterval = setInterval(async () => {
+                console.log('🔄 Actualización automática ejecutándose...');
+                await cargarReportes(false); // false = actualización automática
+            }, AUTO_UPDATE_INTERVAL);
+            
+            console.log(`✅ Actualización automática iniciada (cada ${AUTO_UPDATE_INTERVAL/1000} segundos)`);
+        }
+
+        // Función para detener la actualización automática
+        function detenerActualizacionAutomatica() {
+            if (autoUpdateInterval) {
+                clearInterval(autoUpdateInterval);
+                autoUpdateInterval = null;
+                console.log('⏹️ Actualización automática detenida');
+            }
+        }
+
+        // Función para actualizar el tiempo de última actualización
+        function updateLastRefreshTime() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('es-CO', { 
+                hour: '2-digit', 
+                minute: '2-digit', 
+                second: '2-digit' 
+            });
+            
+            // Actualizar indicador visual si existe
+            let indicator = document.getElementById('lastUpdateIndicator');
+            if (!indicator) {
+                // Crear indicador si no existe
+                indicator = document.createElement('div');
+                indicator.id = 'lastUpdateIndicator';
+                indicator.className = 'last-update-indicator';
+                indicator.innerHTML = `
+                    <i class="fas fa-sync-alt"></i>
+                    <span>Última actualización: <strong id="lastUpdateTime">${timeString}</strong></span>
+                `;
+                
+                // Insertarlo en el header
+                const headerSection = document.querySelector('.header-section');
+                if (headerSection) {
+                    headerSection.appendChild(indicator);
+                }
+            } else {
+                // Actualizar tiempo existente
+                const timeElement = document.getElementById('lastUpdateTime');
+                if (timeElement) {
+                    timeElement.textContent = timeString;
+                }
+            }
+            
+            // Efecto visual de actualización
+            if (indicator) {
+                indicator.style.transform = 'scale(1.05)';
+                indicator.style.backgroundColor = 'rgba(108, 92, 231, 0.2)';
+                setTimeout(() => {
+                    indicator.style.transform = 'scale(1)';
+                    indicator.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
+                }, 300);
             }
         }
 
@@ -410,10 +1797,20 @@
         }
 
 
-        // Actualizar marcadores en el mapa (revertido a marcadores normales)
-        function actualizarMapa(reportes) {
-            // Guardar estado anterior (no se usa ampliamente pero se conserva)
-            const prevBounds = markersGroup.getBounds && markersGroup.getLayers().length ? markersGroup.getBounds() : null;
+        // Actualizar marcadores en el mapa preservando vista cuando sea apropiado
+        function actualizarMapa(reportes, isManualRefresh = false) {
+            // Guardar estado actual del mapa si el usuario ha interactuado con él
+            let currentCenter = null;
+            let currentZoom = null;
+            
+            if (preserveMapView && map) {
+                currentCenter = map.getCenter();
+                currentZoom = map.getZoom();
+                console.log('💾 Guardando vista actual del mapa:', {
+                    center: currentCenter,
+                    zoom: currentZoom
+                });
+            }
 
             markersGroup.clearLayers();
             // limpiar antiguos objectURLs si fuera necesario
@@ -424,6 +1821,21 @@
 
             if (!reportes || reportes.length === 0) return;
 
+            // Filtrar eventos finalizados hace más de 12 horas
+            const ahora = new Date();
+            const doceHorasAtras = new Date(ahora.getTime() - (12 * 60 * 60 * 1000));
+            
+            reportes = reportes.filter(reporte => {
+                // Si es un evento cultural o deportivo con fecha de fin
+                if ((reporte.tipo_reporte === 'Eventos Culturales' || reporte.tipo_reporte === 'Eventos Deportivos') && reporte.fecha_fin_evento) {
+                    const fechaFin = new Date(reporte.fecha_fin_evento);
+                    // Solo mostrar si el evento NO ha terminado hace más de 12 horas
+                    return fechaFin >= doceHorasAtras;
+                }
+                // Mostrar todos los demás reportes
+                return true;
+            });
+
             const HIGHLIGHT_COUNT = 5;
 
             reportes.forEach((reporte, index) => {
@@ -431,32 +1843,76 @@
                 const lng = reporte.longitud;
                 const isHighlighted = index < HIGHLIGHT_COUNT;
 
-                // Construir popup DOM
+                // Construir popup DOM con nuevo diseño
                 const popupDiv = document.createElement('div');
                 popupDiv.className = 'marker-popup';
+                
+                // Contenedor principal con glassmorphism
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'popup-content';
+                
+                // Badge del tipo de reporte
+                const typeBadge = document.createElement('div');
+                typeBadge.className = 'popup-type-badge';
+                typeBadge.innerHTML = `<i class="fas fa-tag"></i> ${reporte.tipo_reporte}`;
+                contentDiv.appendChild(typeBadge);
+                
+                // Título con icono
                 const title = document.createElement('h6');
-                title.innerHTML = `<i class="fas fa-map-marker-alt text-danger"></i> Reporte #${reporte.id}`;
-                popupDiv.appendChild(title);
+                title.innerHTML = `<i class="fas fa-map-marker-alt"></i>Reporte #${reporte.id}`;
+                contentDiv.appendChild(title);
 
+                // Fecha con icono
                 const fechaP = document.createElement('p');
-                fechaP.innerHTML = `<strong>Fecha:</strong> ${formatearFecha(reporte.timestamp)}`;
-                popupDiv.appendChild(fechaP);
+                fechaP.innerHTML = `<i class="fas fa-calendar-alt"></i><strong>Fecha:</strong> ${formatearFecha(reporte.timestamp)}`;
+                contentDiv.appendChild(fechaP);
 
+                // Coordenadas con icono
                 const coordP = document.createElement('p');
-                coordP.innerHTML = `<strong>Coordenadas:</strong> ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-                popupDiv.appendChild(coordP);
+                coordP.innerHTML = `<i class="fas fa-map-pin"></i><strong>Ubicación:</strong> ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+                contentDiv.appendChild(coordP);
 
+                // Descripción si existe
                 if (reporte.descripcion) {
                     const descP = document.createElement('p');
-                    descP.innerHTML = `<strong>Descripción:</strong> ${reporte.descripcion}`;
-                    popupDiv.appendChild(descP);
+                    descP.innerHTML = `<i class="fas fa-comment"></i><strong>Descripción:</strong> ${reporte.descripcion}`;
+                    contentDiv.appendChild(descP);
                 }
 
-                const tipoP = document.createElement('p');
-                tipoP.innerHTML = `<strong>Tipo:</strong> ${reporte.tipo_reporte}`;
-                popupDiv.appendChild(tipoP);
+                // Fechas de evento si es evento cultural o deportivo
+                if ((reporte.tipo_reporte === 'Eventos Culturales' || reporte.tipo_reporte === 'Eventos Deportivos') && reporte.fecha_inicio_evento) {
+                    console.log(`📅 Evento detectado - ID: ${reporte.id}, Tipo: ${reporte.tipo_reporte}`);
+                    console.log(`   Inicio: ${reporte.fecha_inicio_evento}, Fin: ${reporte.fecha_fin_evento}`);
+                    
+                    const eventoDivider = document.createElement('div');
+                    eventoDivider.style.cssText = 'border-top: 2px solid rgba(108, 92, 231, 0.3); margin: 10px 0 8px 0; padding-top: 10px;';
+                    contentDiv.appendChild(eventoDivider);
+                    
+                    const eventoTitle = document.createElement('p');
+                    eventoTitle.innerHTML = `<i class="fas fa-calendar-alt" style="color: #6c757d;"></i><strong>Horario del Evento:</strong>`;
+                    eventoTitle.style.cssText = 'font-size: 0.95rem; margin-bottom: 8px; color: #6c757d;';
+                    contentDiv.appendChild(eventoTitle);
+                    
+                    const inicioP = document.createElement('p');
+                    inicioP.innerHTML = `<i class="fas fa-calendar-check" style="color: #28a745;"></i><strong>Inicio:</strong> ${formatearFecha(reporte.fecha_inicio_evento)}`;
+                    inicioP.style.cssText = 'font-size: 0.9rem; background: rgba(40, 167, 69, 0.1); padding: 6px 10px; border-radius: 6px; margin-bottom: 6px;';
+                    contentDiv.appendChild(inicioP);
+                    
+                    if (reporte.fecha_fin_evento) {
+                        const finP = document.createElement('p');
+                        finP.innerHTML = `<i class="fas fa-calendar-times" style="color: #dc3545;"></i><strong>Fin:</strong> ${formatearFecha(reporte.fecha_fin_evento)}`;
+                        finP.style.cssText = 'font-size: 0.9rem; background: rgba(220, 53, 69, 0.1); padding: 6px 10px; border-radius: 6px;';
+                        contentDiv.appendChild(finP);
+                    }
+                } else if ((reporte.tipo_reporte === 'Eventos Culturales' || reporte.tipo_reporte === 'Eventos Deportivos')) {
+                    console.log(`⚠️ Evento sin fechas - ID: ${reporte.id}, Tipo: ${reporte.tipo_reporte}`);
+                    console.log(`   fecha_inicio_evento: ${reporte.fecha_inicio_evento}, fecha_fin_evento: ${reporte.fecha_fin_evento}`);
+                }
+
+                popupDiv.appendChild(contentDiv);
 
                 const imgPlaceholder = document.createElement('div');
+                imgPlaceholder.className = 'popup-image-container';
                 if (reporte.foto_base64) {
                     const img = document.createElement('img');
                     // Si la columna ahora guarda la ruta relativa (imagenes_reportes/ID.jpg)
@@ -466,20 +1922,16 @@
                         // Si por compatibilidad aún es base64, usar data URI
                         img.src = `data:image/jpeg;base64,${reporte.foto_base64}`;
                     }
-                    img.style.maxWidth = '100%';
-                    img.style.maxHeight = '150px';
-                    img.style.objectFit = 'cover';
-                    img.style.marginTop = '10px';
-                    img.style.cursor = 'pointer';
                     img.addEventListener('click', function () {
-                        mostrarFotoModal(img.src, reporte.id, reporte.timestamp);
+                        mostrarFotoModal(img.src, reporte.id, reporte.timestamp, reporte);
                     });
                     imgPlaceholder.appendChild(img);
                 }
                 popupDiv.appendChild(imgPlaceholder);
 
-                // Crear marcador normal (como antes)
-                const marker = L.marker([lat, lng]);
+                // Crear marcador con icono personalizado según tipo de reporte
+                const customIcon = createCustomIcon(reporte.tipo_reporte);
+                const marker = L.marker([lat, lng], { icon: customIcon });
                 marker.bindPopup(popupDiv);
                 marker.addTo(markersGroup);
 
@@ -496,18 +1948,36 @@
                 markersById[reporte.id] = marker;
             });
 
-            // Ajustar vista solo si los nuevos marcadores no están ya contenidos
+            // Lógica para ajustar vista del mapa
             try {
                 const layers = markersGroup.getLayers();
                 if (layers.length > 0) {
-                    const group = new L.featureGroup(layers);
-                    const newBounds = group.getBounds().pad(0.1);
-
-                    const currentBounds = map.getBounds ? map.getBounds() : null;
-                    const needFit = firstLoad || !boundsContainsBounds(currentBounds, newBounds);
-                    if (needFit) {
+                    // Si es la primera carga O es una actualización manual, ajustar vista automáticamente
+                    if (firstLoad || isManualRefresh) {
+                        const group = new L.featureGroup(layers);
+                        const newBounds = group.getBounds().pad(0.1);
                         map.fitBounds(newBounds);
                         firstLoad = false;
+                        console.log('🎯 Vista ajustada automáticamente (primera carga o actualización manual)');
+                    }
+                    // Si el usuario ha interactuado con el mapa, preservar su vista
+                    else if (preserveMapView && currentCenter && currentZoom) {
+                        map.setView(currentCenter, currentZoom);
+                        console.log('🔒 Vista del mapa preservada durante actualización automática');
+                    }
+                    // Caso por defecto: ajustar vista solo si es necesario
+                    else {
+                        const group = new L.featureGroup(layers);
+                        const newBounds = group.getBounds().pad(0.1);
+                        const currentBounds = map.getBounds();
+                        const needFit = !boundsContainsBounds(currentBounds, newBounds);
+                        
+                        if (needFit) {
+                            map.fitBounds(newBounds);
+                            console.log('📐 Vista ajustada - nuevos marcadores fuera del área visible');
+                        } else {
+                            console.log('✅ Vista mantenida - todos los marcadores visibles');
+                        }
                     }
                 }
             } catch (err) {
@@ -519,10 +1989,12 @@
         function actualizarEstadisticas(stats, reportes) {
             const total = stats ? stats.total_reportes : reportes.length;
             const hoy = contarReportesHoy(reportes);
+            const semana = contarReportesSemana(reportes);
             const ultimo = stats ? stats.ultimo_reporte : (reportes.length > 0 ? reportes[0].timestamp : null);
             
             document.getElementById('totalReportes').textContent = total;
             document.getElementById('reportesHoy').textContent = hoy;
+            document.getElementById('reportesSemana').textContent = semana;
             document.getElementById('ultimoReporte').textContent = ultimo ? formatearFecha(ultimo) : 'Sin reportes';
         }
         
@@ -532,13 +2004,13 @@
             container.innerHTML = '';
 
             if (!reportes || reportes.length === 0) {
-                container.innerHTML = '<p class="text-muted">No hay reportes con fotos</p>';
+                container.innerHTML = '<div class="text-center py-4"><i class="fas fa-inbox text-muted" style="font-size: 2rem;"></i><p class="text-muted mt-2">No hay reportes disponibles</p></div>';
                 return;
             }
 
             const fotos = reportes.filter(r => r.foto_base64).slice(0, 5);
             if (fotos.length === 0) {
-                container.innerHTML = '<p class="text-muted">No hay fotos disponibles</p>';
+                container.innerHTML = '<div class="text-center py-4"><i class="fas fa-camera-retro text-muted" style="font-size: 2rem;"></i><p class="text-muted mt-2">No hay fotos disponibles</p></div>';
                 return;
             }
 
@@ -552,20 +2024,303 @@
                 // Usar la ruta como src
                 img.src = reporte.foto_base64.startsWith('/') ? reporte.foto_base64 : `/${reporte.foto_base64}`;
                 img.addEventListener('click', () => {
-                    mostrarFotoModal(img.src, reporte.id, reporte.timestamp);
+                    mostrarFotoModal(img.src, reporte.id, reporte.timestamp, reporte);
                 });
 
+                const info = document.createElement('div');
+                info.className = 'photo-item-info';
+                info.innerHTML = `<i class="fas fa-hashtag"></i> Reporte #${reporte.id} • <i class="fas fa-clock"></i> ${formatearFecha(reporte.timestamp)}`;
+
                 item.appendChild(img);
+                item.appendChild(info);
                 container.appendChild(item);
             });
         }
 
         // Mostrar modal con foto grande
-        function mostrarFotoModal(src, id, timestamp) {
+        function mostrarFotoModal(src, id, timestamp, reporte = null) {
             const modalImage = document.getElementById('modalImage');
             const modalInfo = document.getElementById('modalInfo');
             modalImage.src = src;
-            modalInfo.textContent = `Reporte #${id} — ${timestamp ? formatearFecha(timestamp) : ''}`;
+            
+            // Si tenemos el objeto reporte completo, mostrar más información
+            if (reporte) {
+                modalInfo.innerHTML = `
+                    <div class="modal-info-item">
+                        <i class="fas fa-hashtag modal-info-icon"></i>
+                        <span class="modal-info-label">ID:</span>
+                        <span class="modal-info-value">#${reporte.id}</span>
+                    </div>
+                    <div class="modal-info-item">
+                        <i class="fas fa-tag modal-info-icon"></i>
+                        <span class="modal-info-label">Tipo:</span>
+                        <span class="modal-info-value">${reporte.tipo_reporte || 'No especificado'}</span>
+                    </div>
+                    <div class="modal-info-item">
+                        <i class="fas fa-calendar-alt modal-info-icon"></i>
+                        <span class="modal-info-label">Fecha:</span>
+                        <span class="modal-info-value">${reporte.timestamp ? formatearFecha(reporte.timestamp) : 'No disponible'}</span>
+                    </div>
+                    <div class="modal-info-item">
+                        <i class="fas fa-map-marker-alt modal-info-icon"></i>
+                        <span class="modal-info-label">Ubicación:</span>
+                        <span class="modal-info-value">${reporte.latitud.toFixed(6)}, ${reporte.longitud.toFixed(6)}</span>
+                    </div>
+                    ${reporte.descripcion ? `
+                    <div class="modal-info-item">
+                        <i class="fas fa-comment modal-info-icon"></i>
+                        <span class="modal-info-label">Descripción:</span>
+                        <span class="modal-info-value">${reporte.descripcion}</span>
+                    </div>
+                    ` : ''}
+                    ${(reporte.tipo_reporte === 'Eventos Culturales' || reporte.tipo_reporte === 'Eventos Deportivos') && reporte.fecha_inicio_evento ? `
+                    <div class="modal-info-item" style="border-top: 2px solid rgba(108, 92, 231, 0.2); margin-top: 12px; padding-top: 12px; background: rgba(108, 92, 231, 0.05); border-radius: 8px; padding: 10px;">
+                        <i class="fas fa-calendar-check modal-info-icon" style="color: #28a745;"></i>
+                        <span class="modal-info-label">Inicio del Evento:</span>
+                        <span class="modal-info-value"><strong>${formatearFecha(reporte.fecha_inicio_evento)}</strong></span>
+                    </div>
+                    ` : ''}
+                    ${(reporte.tipo_reporte === 'Eventos Culturales' || reporte.tipo_reporte === 'Eventos Deportivos') && reporte.fecha_fin_evento ? `
+                    <div class="modal-info-item" style="background: rgba(220, 53, 69, 0.05); border-radius: 8px; padding: 10px;">
+                        <i class="fas fa-calendar-times modal-info-icon" style="color: #dc3545;"></i>
+                        <span class="modal-info-label">Fin del Evento:</span>
+                        <span class="modal-info-value"><strong>${formatearFecha(reporte.fecha_fin_evento)}</strong></span>
+                    </div>
+                    ` : ''}
+                `;
+            } else {
+                // Formato simple para compatibilidad
+                modalInfo.innerHTML = `
+                    <div class="modal-info-item">
+                        <i class="fas fa-hashtag modal-info-icon"></i>
+                        <span class="modal-info-label">ID:</span>
+                        <span class="modal-info-value">#${id}</span>
+                    </div>
+                    <div class="modal-info-item">
+                        <i class="fas fa-calendar-alt modal-info-icon"></i>
+                        <span class="modal-info-label">Fecha:</span>
+                        <span class="modal-info-value">${timestamp ? formatearFecha(timestamp) : 'No disponible'}</span>
+                    </div>
+                `;
+            }
+            
+            const bsModal = new bootstrap.Modal(document.getElementById('photoModal'), {});
+            bsModal.show();
+        }
+
+        // Cargar datos de aforo desde el servidor
+        async function cargarDatosAforo() {
+            const container = document.getElementById('aforoContainer');
+            
+            try {
+                // Obtener historial de aforo (solo el último registro)
+                const historialResponse = await fetch(`${API_BASE_URL}/aforo/historial?limite=1&orden=desc`);
+                
+                if (!historialResponse.ok) {
+                    throw new Error('No se pudo cargar el historial de aforo');
+                }
+                
+                const historialData = await historialResponse.json();
+                const registros = historialData.registros || [];
+                
+                if (registros.length === 0) {
+                    container.innerHTML = `
+                        <div class="places-empty">
+                            <i class="fas fa-map-marked-alt"></i>
+                            <p>No hay datos disponibles</p>
+                            <small>Esperando capturas del sistema de monitoreo</small>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                container.innerHTML = '';
+                
+                // Mostrar solo el último registro de aforo
+                const registro = registros[0];
+                const item = document.createElement('div');
+                item.className = 'aforo-item';
+                
+                // Imagen
+                const img = document.createElement('img');
+                img.alt = `Aforo #${registro.id}`;
+                img.style.cursor = 'pointer';
+                img.src = registro.foto_ruta.startsWith('/') ? registro.foto_ruta : `/${registro.foto_ruta}`;
+                img.addEventListener('click', () => {
+                    mostrarAforoModal(img.src, registro);
+                });
+                
+                // Información básica
+                const info = document.createElement('div');
+                info.className = 'aforo-item-info';
+                info.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span><i class="fas fa-map-marker-alt"></i> Bloque L, Piso 3, 1L6-38</span>
+                        <span><i class="fas fa-clock"></i> ${formatearFecha(registro.timestamp_captura)}</span>
+                    </div>
+                `;
+                
+                // Estadísticas del registro - Solo personas
+                const stats = document.createElement('div');
+                stats.className = 'aforo-stats';
+                
+                // Configuración de capacidad por lugar
+                const capacidadMaxima = 16; // Bloque L, Piso 3, 1L6-38
+                const porcentajeOcupacion = (registro.aforo / capacidadMaxima) * 100;
+                
+                // Determinar nivel de ocupación y color
+                let nivelOcupacion = 'low';
+                if (porcentajeOcupacion >= 100) {
+                    nivelOcupacion = 'full';
+                } else if (porcentajeOcupacion >= 75) {
+                    nivelOcupacion = 'high';
+                } else if (porcentajeOcupacion >= 50) {
+                    nivelOcupacion = 'medium';
+                }
+                
+                stats.innerHTML = `
+                    <div class="aforo-stat" style="grid-column: 1 / -1;">
+                        <div class="aforo-stat-number ${nivelOcupacion}">${registro.aforo}</div>
+                        <div class="aforo-stat-label">Personas Detectadas</div>
+                        <div class="capacity-indicator">
+                            <span style="font-size: 0.75rem;">${registro.aforo}/${capacidadMaxima}</span>
+                            <div class="capacity-bar">
+                                <div class="capacity-fill ${nivelOcupacion}" style="width: ${Math.min(porcentajeOcupacion, 100)}%"></div>
+                            </div>
+                            <span style="font-size: 0.75rem;">${Math.round(porcentajeOcupacion)}%</span>
+                        </div>
+                    </div>
+                `;
+                
+                // Botón de historial
+                const btnHistorial = document.createElement('button');
+                btnHistorial.className = 'btn-historial';
+                btnHistorial.innerHTML = '<i class="fas fa-history"></i> Mostrar Historial';
+                btnHistorial.onclick = () => mostrarModalHistorial();
+                
+                item.appendChild(img);
+                item.appendChild(info);
+                item.appendChild(stats);
+                item.appendChild(btnHistorial);
+                container.appendChild(item);
+                
+                // Crear marcador en el mapa para el lugar de interés (si tiene coordenadas)
+                if (registro.latitud && registro.longitud) {
+                    // Remover marcador anterior si existe
+                    if (aforoMarker) {
+                        markersGroup.removeLayer(aforoMarker);
+                    }
+                    
+                    // Crear popup para el lugar de interés
+                    const aforoPopupDiv = document.createElement('div');
+                    aforoPopupDiv.className = 'marker-popup';
+                    
+                    const aforoContentDiv = document.createElement('div');
+                    aforoContentDiv.className = 'popup-content';
+                    
+                    const aforoBadge = document.createElement('div');
+                    aforoBadge.className = 'popup-type-badge';
+                    aforoBadge.style.background = 'linear-gradient(135deg, #17a2b8, #138496)';
+                    aforoBadge.innerHTML = '<i class="fas fa-map-pin"></i> Lugar de Interés';
+                    aforoContentDiv.appendChild(aforoBadge);
+                    
+                    const aforoTitle = document.createElement('h6');
+                    aforoTitle.innerHTML = '<i class="fas fa-building"></i> Bloque L, Piso 3, 1L6-38';
+                    aforoContentDiv.appendChild(aforoTitle);
+                    
+                    const aforoData = document.createElement('p');
+                    aforoData.innerHTML = `<i class="fas fa-users"></i><strong>Aforo actual:</strong> ${registro.aforo} persona${registro.aforo !== 1 ? 's' : ''} (${Math.round(porcentajeOcupacion)}%)`;
+                    aforoContentDiv.appendChild(aforoData);
+                    
+                    const aforoFecha = document.createElement('p');
+                    aforoFecha.innerHTML = `<i class="fas fa-clock"></i><strong>Actualizado:</strong> ${formatearFecha(registro.timestamp_captura)}`;
+                    aforoContentDiv.appendChild(aforoFecha);
+                    
+                    aforoPopupDiv.appendChild(aforoContentDiv);
+                    
+                    // Agregar imagen al popup
+                    const aforoImgPlaceholder = document.createElement('div');
+                    aforoImgPlaceholder.className = 'popup-image-container';
+                    const aforoImgPopup = document.createElement('img');
+                    aforoImgPopup.src = registro.foto_ruta.startsWith('/') ? registro.foto_ruta : `/${registro.foto_ruta}`;
+                    aforoImgPopup.addEventListener('click', () => {
+                        mostrarAforoModal(aforoImgPopup.src, registro);
+                    });
+                    aforoImgPlaceholder.appendChild(aforoImgPopup);
+                    aforoPopupDiv.appendChild(aforoImgPlaceholder);
+                    
+                    // Crear marcador con icono personalizado
+                    const aforoIcon = createCustomIcon('lugares_interes');
+                    aforoMarker = L.marker([registro.latitud, registro.longitud], { icon: aforoIcon });
+                    aforoMarker.bindPopup(aforoPopupDiv);
+                    aforoMarker.addTo(markersGroup);
+                    aforoMarker.setZIndexOffset(2000); // Mayor prioridad visual
+                }
+                
+            } catch (error) {
+                console.error('Error al cargar datos de aforo:', error);
+                container.innerHTML = `
+                    <div class="places-empty">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <p>Error al cargar datos</p>
+                        <small>${error.message}</small>
+                    </div>
+                `;
+            }
+        }
+
+        // Mostrar modal con imagen de aforo
+        function mostrarAforoModal(src, registro) {
+            const modalImage = document.getElementById('modalImage');
+            const modalInfo = document.getElementById('modalInfo');
+            modalImage.src = src;
+            
+            // Configuración de capacidad y nivel
+            const capacidadMaxima = 16;
+            const porcentajeOcupacion = (registro.aforo / capacidadMaxima) * 100;
+            let nivelOcupacion = 'low';
+            let estadoTexto = '✅ Disponible';
+            let colorEstado = '#10b981';
+            
+            if (porcentajeOcupacion >= 100) {
+                nivelOcupacion = 'full';
+                estadoTexto = '🚫 Lleno';
+                colorEstado = '#dc2626';
+            } else if (porcentajeOcupacion >= 75) {
+                nivelOcupacion = 'high';
+                estadoTexto = '⚠️ Casi lleno';
+                colorEstado = '#ef4444';
+            } else if (porcentajeOcupacion >= 50) {
+                nivelOcupacion = 'medium';
+                estadoTexto = '⚡ Media ocupación';
+                colorEstado = '#f59e0b';
+            }
+            
+            modalInfo.innerHTML = `
+                <div class="modal-report-info">
+                    <div class="modal-info-item">
+                        <i class="fas fa-building modal-info-icon"></i>
+                        <span class="modal-info-label">Lugar:</span>
+                        <span class="modal-info-value"><strong>Bloque L, Piso 3, 1L6-38</strong></span>
+                    </div>
+                    <div class="modal-info-item">
+                        <i class="fas fa-users modal-info-icon"></i>
+                        <span class="modal-info-label">Aforo:</span>
+                        <span class="modal-info-value"><strong style="color: ${colorEstado}">${registro.aforo}/${capacidadMaxima} persona${registro.aforo !== 1 ? 's' : ''}</strong> (${Math.round(porcentajeOcupacion)}%)</span>
+                    </div>
+                    <div class="modal-info-item">
+                        <i class="fas fa-info-circle modal-info-icon"></i>
+                        <span class="modal-info-label">Estado:</span>
+                        <span class="modal-info-value" style="color: ${colorEstado}; font-weight: 600;">${estadoTexto}</span>
+                    </div>
+                    <div class="modal-info-item">
+                        <i class="fas fa-calendar-alt modal-info-icon"></i>
+                        <span class="modal-info-label">Captura:</span>
+                        <span class="modal-info-value">${formatearFecha(registro.timestamp_captura)}</span>
+                    </div>
+                </div>
+            `;
+            
             const bsModal = new bootstrap.Modal(document.getElementById('photoModal'), {});
             bsModal.show();
         }
@@ -586,6 +2341,24 @@
             }, 0);
         }
 
+        // Contar reportes de la semana actual (local)
+        function contarReportesSemana(reportes) {
+            if (!reportes || reportes.length === 0) return 0;
+            const hoy = new Date();
+            const inicioSemana = new Date(hoy);
+            inicioSemana.setDate(hoy.getDate() - hoy.getDay()); // Domingo como inicio de semana
+            inicioSemana.setHours(0, 0, 0, 0);
+            
+            return reportes.reduce((acc, r) => {
+                if (!r.timestamp) return acc;
+                const d = new Date(r.timestamp);
+                if (d >= inicioSemana) {
+                    return acc + 1;
+                }
+                return acc;
+            }, 0);
+        }
+
         // Formatear fecha de forma legible
         function formatearFecha(timestamp) {
             if (!timestamp) return '';
@@ -600,9 +2373,28 @@
         // Mostrar / ocultar indicador de carga simple
         function showLoading(enabled) {
             const btn = document.querySelector('.btn-refresh');
+            const body = document.body;
+            const indicator = document.getElementById('lastUpdateIndicator');
+            
             if (btn) btn.disabled = !!enabled;
-            if (enabled) document.body.classList.add('loading');
-            else document.body.classList.remove('loading');
+            
+            if (enabled) {
+                body.classList.add('updating');
+                if (indicator) {
+                    const icon = indicator.querySelector('i');
+                    if (icon) {
+                        icon.className = 'fas fa-spinner';
+                    }
+                }
+            } else {
+                body.classList.remove('updating');
+                if (indicator) {
+                    const icon = indicator.querySelector('i');
+                    if (icon) {
+                        icon.className = 'fas fa-sync-alt';
+                    }
+                }
+            }
         }
 
         // Mostrar mensajes de error/éxito
@@ -649,9 +2441,11 @@
             const lng = parseFloat(document.getElementById('inputLng').value);
             const file = document.getElementById('inputFoto').files[0];
             const feedback = document.getElementById('addReportFeedback');
+            const feedbackText = feedback.querySelector('span');
 
             if (!lat || !lng || Number.isNaN(lat) || Number.isNaN(lng)) {
-                if (feedback) { feedback.style.display = 'block'; feedback.textContent = 'Seleccione las coordenadas en el mapa.'; }
+                feedback.style.display = 'block';
+                feedbackText.textContent = 'Por favor, seleccione las coordenadas en el mapa.';
                 return;
             }
 
@@ -680,33 +2474,315 @@
 
                 const nuevoReporte = await res.json();
 
+                // Limpiar formulario
+                document.getElementById('inputTipo').value = 'otro';
+                document.getElementById('inputDescripcion').value = '';
+                document.getElementById('inputLat').value = '';
+                document.getElementById('inputLng').value = '';
+                document.getElementById('inputFoto').value = '';
+                feedback.style.display = 'none';
+
                 const bsModalEl = document.getElementById('addReportModal');
                 const bsModal = bootstrap.Modal.getInstance(bsModalEl);
                 if (bsModal) bsModal.hide();
 
-                showSuccess('Reporte creado exitosamente');
-                await cargarReportes();
+                showSuccess('¡Reporte creado exitosamente! 🎉');
+                await cargarReportes(true); // true = actualización manual después de crear reporte
 
                 if (map && nuevoReporte) {
                     map.setView([nuevoReporte.latitud, nuevoReporte.longitud], 15, { animate: true, duration: 1 });
                 }
             } catch (err) {
                 console.error('Error enviando reporte:', err);
-                if (feedback) { feedback.style.display = 'block'; feedback.textContent = 'Error al enviar el reporte.'; }
+                feedback.style.display = 'block';
+                feedbackText.textContent = 'Error al enviar el reporte. Inténtelo nuevamente.';
             } finally {
                 showLoading(false);
             }
         }
 
+        // Función para abrir el modal de agregar reporte
+        function abrirModalAgregar() {
+            const modal = new bootstrap.Modal(document.getElementById('addReportModal'), {});
+            modal.show();
+        }
+
+        // Función para activar selección de coordenadas en el mapa
+        function activarSeleccionMapa() {
+            seleccionarCoords = true;
+            showSuccess('Haga clic en el mapa para seleccionar la ubicación');
+        }
+
         // Inicializar y cargar al abrir
         document.addEventListener('DOMContentLoaded', () => {
             initMap();
-            cargarReportes();
+            cargarReportes(true); // true = carga inicial
+            iniciarActualizacionAutomatica(); // Iniciar actualización automática
+        });
+
+        // Pausar actualización automática cuando la página no está visible
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                detenerActualizacionAutomatica();
+                console.log('⏸️ Página oculta - actualización automática pausada');
+            } else {
+                iniciarActualizacionAutomatica();
+                console.log('▶️ Página visible - actualización automática reanudada');
+                // Actualizar inmediatamente al volver a la página
+                cargarReportes(true); // true = actualización manual al volver a la página
+            }
         });
 
         // Variables auxiliares para la selección en mapa
         let seleccionarCoords = false;
         let tempMarkerForSelection = null;
+
+        // Variables para filtros
+        let currentFilter = 'todos';
+        let allReportes = [];
+        
+        // Variables para historial de aforo
+        let currentInterval = 1; // Intervalo en horas (por defecto: última hora)
+        let historialModal = null;
+        
+        // Marcador de lugar de interés (aforo)
+        let aforoMarker = null;
+
+        // Función para obtener color del marcador según tipo de reporte
+        function getMarkerColor(tipoReporte) {
+            const colores = {
+                'Daños en Planta Urbanisticas': '#dc3545', // Rojo
+                'Eventos Culturales': '#9b59b6', // Púrpura
+                'Eventos Deportivos': '#28a745', // Verde
+                'Obras en Proceso': '#fd7e14', // Naranja
+                'lugares_interes': '#17a2b8', // Cian (para lugares de interés/aforo)
+                'default': '#6c757d' // Gris por defecto
+            };
+            return colores[tipoReporte] || colores['default'];
+        }
+
+        // Función para crear icono de marcador personalizado
+        function createCustomIcon(tipoReporte) {
+            const color = getMarkerColor(tipoReporte);
+            
+            const svgIcon = `
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 36" width="32" height="48">
+                    <path fill="${color}" stroke="#fff" stroke-width="2" 
+                          d="M12 0C7.03 0 3 4.03 3 9c0 6.75 9 18 9 18s9-11.25 9-18c0-4.97-4.03-9-9-9z"/>
+                    <circle cx="12" cy="9" r="4" fill="#fff"/>
+                </svg>
+            `;
+            
+            return L.divIcon({
+                className: 'custom-marker-icon',
+                html: svgIcon,
+                iconSize: [32, 48],
+                iconAnchor: [16, 48],
+                popupAnchor: [0, -48]
+            });
+        }
+
+        // Función para mostrar el modal de historial
+        function mostrarModalHistorial() {
+            if (!historialModal) {
+                historialModal = new bootstrap.Modal(document.getElementById('historialModal'), {});
+            }
+            historialModal.show();
+            
+            // Cargar datos del historial
+            cargarHistorialAforo(currentInterval);
+        }
+
+        // Función para seleccionar intervalo de tiempo
+        function seleccionarIntervalo(element, horas) {
+            // Remover clase active de todas las opciones
+            document.querySelectorAll('.interval-option').forEach(opt => {
+                opt.classList.remove('active');
+            });
+            
+            // Agregar clase active a la opción seleccionada
+            element.classList.add('active');
+            
+            // Actualizar intervalo actual
+            currentInterval = horas;
+            
+            // Recargar historial con nuevo intervalo
+            cargarHistorialAforo(horas);
+        }
+
+        // Función para cargar historial de aforo con intervalo específico
+        async function cargarHistorialAforo(horasAtras) {
+            const container = document.getElementById('historialTableContainer');
+            
+            try {
+                container.innerHTML = `
+                    <div class="text-center py-4">
+                        <i class="fas fa-spinner fa-spin" style="font-size: 2rem;"></i>
+                        <p class="mt-2">Cargando historial...</p>
+                    </div>
+                `;
+                
+                // Calcular timestamp de inicio (fecha límite para filtrar)
+                const ahora = new Date();
+                const fechaLimite = new Date(ahora.getTime() - (horasAtras * 60 * 60 * 1000));
+                
+                // Obtener historial completo (máximo 500 registros)
+                const response = await fetch(`${API_BASE_URL}/aforo/historial?limite=500&orden=desc`);
+                
+                if (!response.ok) {
+                    throw new Error('No se pudo cargar el historial');
+                }
+                
+                const data = await response.json();
+                let registros = data.registros || [];
+                
+                // Filtrar registros por intervalo de tiempo
+                registros = registros.filter(registro => {
+                    const fechaRegistro = new Date(registro.timestamp_captura);
+                    return fechaRegistro >= fechaLimite;
+                });
+                
+                if (registros.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-historial">
+                            <i class="fas fa-inbox"></i>
+                            <p><strong>No hay registros en este intervalo</strong></p>
+                            <small>Intenta seleccionar un intervalo de tiempo mayor</small>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                // Construir tabla con los registros
+                let tableHTML = `
+                    <table class="historial-table">
+                        <thead>
+                            <tr>
+                                <th><i class="fas fa-calendar-alt"></i> Fecha y Hora</th>
+                                <th style="text-align: center;"><i class="fas fa-users"></i> Aforo</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+                
+                registros.forEach(registro => {
+                    const fechaFormateada = formatearFechaCompleta(registro.timestamp_captura);
+                    tableHTML += `
+                        <tr>
+                            <td>${fechaFormateada}</td>
+                            <td>
+                                <span class="aforo-badge">
+                                    <i class="fas fa-user"></i>
+                                    ${registro.aforo} persona${registro.aforo !== 1 ? 's' : ''}
+                                </span>
+                            </td>
+                        </tr>
+                    `;
+                });
+                
+                tableHTML += `
+                        </tbody>
+                    </table>
+                `;
+                
+                container.innerHTML = tableHTML;
+                
+            } catch (error) {
+                console.error('Error al cargar historial:', error);
+                container.innerHTML = `
+                    <div class="empty-historial">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <p><strong>Error al cargar el historial</strong></p>
+                        <small>${error.message}</small>
+                    </div>
+                `;
+            }
+        }
+
+        // Función para formatear fecha de forma completa
+        function formatearFechaCompleta(timestamp) {
+            if (!timestamp) return '';
+            try {
+                const d = new Date(timestamp);
+                return d.toLocaleString('es-CO', { 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: '2-digit', 
+                    hour: '2-digit', 
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+            } catch (e) {
+                return timestamp;
+            }
+        }
+
+        // Función para manejar filtros
+        function toggleFilter(element, filterType) {
+            // Remover clase active de todos los filtros
+            document.querySelectorAll('.filter-pill').forEach(pill => {
+                pill.classList.remove('active');
+            });
+            
+            // Agregar clase active al filtro seleccionado
+            element.classList.add('active');
+            
+            // Actualizar filtro actual
+            currentFilter = filterType;
+            
+            // Aplicar filtro a los reportes existentes
+            aplicarFiltro();
+            
+            console.log(`Filtro aplicado: ${filterType}`);
+        }
+
+        // Función para aplicar filtro a los reportes
+        function aplicarFiltro() {
+            if (!allReportes || allReportes.length === 0) return;
+            
+            let reportesFiltrados;
+            if (currentFilter === 'todos') {
+                reportesFiltrados = allReportes;
+                // Mostrar marcador de aforo si existe
+                if (aforoMarker) {
+                    aforoMarker.addTo(markersGroup);
+                }
+            } else if (currentFilter === 'lugares_interes') {
+                // Mostrar solo el marcador de aforo
+                reportesFiltrados = [];
+                if (aforoMarker) {
+                    aforoMarker.addTo(markersGroup);
+                }
+            } else {
+                reportesFiltrados = allReportes.filter(reporte => 
+                    reporte.tipo_reporte === currentFilter
+                );
+                // Ocultar marcador de aforo en filtros específicos
+                if (aforoMarker) {
+                    markersGroup.removeLayer(aforoMarker);
+                }
+            }
+            
+            // Actualizar mapa con reportes filtrados
+            actualizarMapa(reportesFiltrados, false);
+            
+            // Re-agregar marcador de aforo si corresponde
+            if (currentFilter === 'todos' || currentFilter === 'lugares_interes') {
+                if (aforoMarker && !markersGroup.hasLayer(aforoMarker)) {
+                    aforoMarker.addTo(markersGroup);
+                }
+            }
+            
+            // Mostrar mensaje informativo
+            const totalFiltrados = reportesFiltrados.length;
+            const totalGeneral = allReportes.length;
+            
+            if (currentFilter === 'lugares_interes') {
+                console.log('Mostrando lugares de interés (aforo)');
+            } else if (currentFilter !== 'todos') {
+                console.log(`Mostrando ${totalFiltrados} de ${totalGeneral} reportes (filtro: ${currentFilter})`);
+            }
+        }
     </script>
 </body>
 </html>

@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useAuth } from "@/store/auth";
 
-const NAV_ITEMS = [
+const BASE_NAV_ITEMS = [
   {
     label: "Inicio",
     href: "/",
@@ -31,12 +32,24 @@ const NAV_ITEMS = [
       </svg>
     ),
   },
+];
+
+const AUTH_NAV_ITEMS = [
   {
-    label: "Aforo",
-    href: "/aforo",
+    label: "Mis Reportes",
+    href: "/mis-reportes",
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
-        <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" />
+        <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11zM8 15.01l1.41 1.41L11 14.84V19h2v-4.16l1.59 1.59L16 15.01 12.01 11 16 15.01z" />
+      </svg>
+    ),
+  },
+  {
+    label: "Reportes Guardados",
+    href: "/reportes-guardados",
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
+        <path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2zm0 15l-5-2.18L7 18V5h10v13z" />
       </svg>
     ),
   },
@@ -44,11 +57,16 @@ const NAV_ITEMS = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { isAuthenticated } = useAuth();
+
+  const navItems = isAuthenticated
+    ? [...BASE_NAV_ITEMS, ...AUTH_NAV_ITEMS]
+    : BASE_NAV_ITEMS;
 
   return (
     <aside className="flex w-56 flex-col border-r border-neutral-200 bg-white">
       <nav className="flex flex-col gap-1 p-3">
-        {NAV_ITEMS.map((item) => {
+        {navItems.map((item) => {
           const isActive = pathname === item.href;
           return (
             <Link

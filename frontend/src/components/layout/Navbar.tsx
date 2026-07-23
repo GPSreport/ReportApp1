@@ -13,7 +13,7 @@ export function Navbar({ appName = "ReportMap" }: NavbarProps) {
 
   return (
     <header className="sticky top-0 z-50 flex h-14 w-full items-center justify-between border-b border-neutral-200 bg-white/90 px-6 backdrop-blur-sm">
-      <div className="flex items-center gap-3">
+      <Link href="/" className="flex items-center gap-3">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-neutral-900 text-white">
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -27,28 +27,7 @@ export function Navbar({ appName = "ReportMap" }: NavbarProps) {
         <span className="text-lg font-semibold tracking-tight text-neutral-900">
           {appName}
         </span>
-      </div>
-
-      <nav className="hidden items-center gap-6 md:flex">
-        <Link
-          href="/"
-          className="text-sm font-medium text-neutral-600 transition-colors hover:text-neutral-900"
-        >
-          Inicio
-        </Link>
-        <Link
-          href="/mapa"
-          className="text-sm font-medium text-neutral-600 transition-colors hover:text-neutral-900"
-        >
-          Mapa
-        </Link>
-        <Link
-          href="/reportes"
-          className="text-sm font-medium text-neutral-600 transition-colors hover:text-neutral-900"
-        >
-          Reportes
-        </Link>
-      </nav>
+      </Link>
 
       <div className="flex items-center gap-3">
         {isAuthenticated ? (

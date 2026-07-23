@@ -22,7 +22,7 @@ export function ArchitectureSummaryCard({ summary }: ArchitectureSummaryCardProp
         ))}
       </ul>
 
-      <div className="text-sm text-neutral-700">
+      <div className="text-sm text-neutral-700" suppressHydrationWarning>
         <p>API base publica: {summary.backend.apiBaseUrl}</p>
         <p>Proxy desarrollo: {summary.backend.proxyPrefix}\/\*</p>
       </div>

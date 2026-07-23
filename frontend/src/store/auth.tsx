@@ -5,6 +5,7 @@ import {
   useContext,
   useState,
   useCallback,
+  useEffect,
   type ReactNode,
 } from "react";
 
@@ -28,6 +29,8 @@ interface AuthContextType {
   logout: () => void;
 }
 
+const AUTH_STORAGE_KEY = "auth_user";
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -35,6 +38,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+
+  // Restore session from localStorage on mount
+  useEffect(() => {
+    const stored = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored) as User;
+        setUser(parsed);
+        setIsAuthenticated(true);
+      } catch {
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+      }
+    }
+  }, []);
 
   const openLogin = useCallback(() => setIsLoginOpen(true), []);
   const closeLogin = useCallback(() => setIsLoginOpen(false), []);
@@ -45,12 +62,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(userData);
     setIsAuthenticated(true);
     setIsLoginOpen(false);
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(userData));
   }, []);
   
   const logout = useCallback(() => {
     setUser(null);
     setIsAuthenticated(false);
     setIsProfileOpen(false);
+    localStorage.removeItem(AUTH_STORAGE_KEY);
   }, []);
 
   return (

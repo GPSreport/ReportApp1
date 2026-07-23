@@ -127,7 +127,7 @@ export function UserProfileSidebar() {
           {/* Footer */}
           <div className="border-t border-neutral-200 p-6">
             <Button
-              variant="destructive"
+              variant="outline"
               className="w-full"
               onClick={handleLogout}
             >
